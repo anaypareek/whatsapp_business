@@ -1,0 +1,22 @@
+export const getToken = () => localStorage.getItem('wab_token')
+export const setToken = (t) => (t ? localStorage.setItem('wab_token', t) : localStorage.removeItem('wab_token'))
+
+export async function api(path, { method = 'GET', body, form } = {}) {
+  const headers = { Accept: 'application/json' }
+  const t = getToken()
+  if (t) headers.Authorization = `Bearer ${t}`
+  let payload
+  if (form) payload = form
+  else if (body !== undefined) { headers['Content-Type'] = 'application/json'; payload = JSON.stringify(body) }
+  const res = await fetch(`/api${path}`, { method, headers, body: payload })
+  if (res.status === 401 && path !== '/auth/login') { setToken(null); window.location.reload() }
+  if (res.status === 204) return null
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const msg = data.errors ? Object.values(data.errors).flat().join(' ') : data.message || data.error || `HTTP ${res.status}`
+    const err = new Error(msg); err.data = data; throw err
+  }
+  return data
+}
+
+export const fmtTime = (s) => s ? new Date(s).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''
