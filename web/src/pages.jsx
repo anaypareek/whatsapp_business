@@ -4,6 +4,7 @@ import { Users as UsersIcon, UserPlus, Trash2, Phone, Plus, RefreshCw, Pencil, S
 import { api, fmtTime, fmtShort } from './api'
 import { Button, Card, PageHeader, Field, TableSkeleton, Empty, Badge, Toggle, useToast, useLoad, Modal, Avatar, Skeleton } from './ui'
 import { TemplateSender } from './templates'
+import { ClientSelect } from './clients'
 
 // ---------------- Users ----------------
 export function Users({ user }) {
@@ -41,13 +42,15 @@ export function Users({ user }) {
 
 // ---------------- Number Master ----------------
 export function Numbers({ user }) {
-  const [rows, reload, loading] = useLoad('/phone-numbers'); const toast = useToast()
-  const blank = { phone_number_id: '', display_number: '', name: '' }
+  const [cf, setCf] = useState('')
+  const [rows, reload, loading] = useLoad(`/phone-numbers${cf ? `?client_id=${cf}` : ''}`); const toast = useToast()
+  const [clients] = useLoad('/clients-list')
+  const blank = { phone_number_id: '', display_number: '', name: '', client_id: '' }
   const [f, setF] = useState(blank); const [editId, setEditId] = useState(null); const [busy, setBusy] = useState(false)
   const [reg, setReg] = useState(null); const [pin, setPin] = useState('')
   const save = async (e) => {
     e.preventDefault(); setBusy(true)
-    try { await api(editId ? `/phone-numbers/${editId}` : '/phone-numbers', { method: editId ? 'PUT' : 'POST', body: f }); toast.success(editId ? 'Number updated' : 'Number added'); setF(blank); setEditId(null); reload() }
+    try { await api(editId ? `/phone-numbers/${editId}` : '/phone-numbers', { method: editId ? 'PUT' : 'POST', body: { ...f, client_id: f.client_id || null } }); toast.success(editId ? 'Number updated' : 'Number added'); setF(blank); setEditId(null); reload() }
     catch (e) { toast.error(e.message) } finally { setBusy(false) }
   }
   const sync = async () => { try { const r = await api('/phone-numbers-sync', { method: 'POST' }); toast.success(`Synced ${r.synced} number(s) from Meta`); reload() } catch (e) { toast.error(e.message) } }
@@ -61,22 +64,24 @@ export function Numbers({ user }) {
           <Field label="Phone number ID" hint="From Meta → WhatsApp → API Setup" icon={Hash}><input value={f.phone_number_id} onChange={(e) => setF({ ...f, phone_number_id: e.target.value })} required /></Field>
           <Field label="Display number" icon={Phone}><input placeholder="+91 98765 43210" value={f.display_number} onChange={(e) => setF({ ...f, display_number: e.target.value })} required /></Field>
           <Field label="Name" icon={Building2}><input placeholder="e.g. Sales" value={f.name || ''} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
+          <Field label="Client" hint="Which client sees this number in their portal"><ClientSelect clients={clients} value={f.client_id} onChange={(v) => setF({ ...f, client_id: v })} /></Field>
           <div className="row"><Button type="submit" variant="primary" icon={editId ? Check : Plus} loading={busy}>{editId ? 'Update' : 'Add number'}</Button>
             {editId && <Button onClick={() => { setEditId(null); setF(blank) }}>Cancel</Button>}</div>
         </form>
       </Card>
-      <Card title={`Numbers (${rows.length})`} pad={false}>
-        <div className="table-wrap"><table className="table"><thead><tr><th>Number</th><th>Phone number ID</th><th>Quality</th><th>Status</th><th /></tr></thead>
-          {loading ? <TableSkeleton cols={5} /> : rows.length ? <tbody>{rows.map((n) => <tr key={n.id}>
+      <Card title={`Numbers (${rows.length})`} pad={false} actions={<div className="filter-w"><ClientSelect allowAll clients={clients} value={cf} onChange={setCf} /></div>}>
+        <div className="table-wrap"><table className="table"><thead><tr><th>Number</th><th>Client</th><th>Phone number ID</th><th>Quality</th><th>Status</th><th /></tr></thead>
+          {loading ? <TableSkeleton cols={6} /> : rows.length ? <tbody>{rows.map((n) => <tr key={n.id}>
             <td><div className="cell-user"><span className="ico-tile"><Phone size={16} /></span><div><b>{n.display_number}</b><small>{n.name || '—'}</small></div></div></td>
+            <td>{n.client ? <div className="client-cell"><b>{n.client.name}</b><small>{n.client.company || ''}{!n.client.is_active && ' · inactive'}</small></div> : <span className="muted">—</span>}</td>
             <td><code>{n.phone_number_id}</code></td>
             <td>{n.quality_rating ? <Badge tone={{ GREEN: 'green', YELLOW: 'amber', RED: 'red' }[n.quality_rating] || 'gray'}>{n.quality_rating}</Badge> : <span className="muted">—</span>}</td>
             <td className="muted">{n.status || '—'}</td>
             <td className="right nowrap">
-              <Button size="sm" variant="ghost" icon={Pencil} onClick={() => { setEditId(n.id); setF({ phone_number_id: n.phone_number_id, display_number: n.display_number, name: n.name || '' }) }} />
+              <Button size="sm" variant="ghost" icon={Pencil} onClick={() => { setEditId(n.id); setF({ phone_number_id: n.phone_number_id, display_number: n.display_number, name: n.name || '', client_id: n.client_id ? String(n.client_id) : '' }) }} />
               {user.is_admin && <Button size="sm" variant="ghost" icon={ShieldCheck} onClick={() => setReg(n)}>Register</Button>}
               <Button size="sm" variant="ghost-danger" icon={Trash2} onClick={() => del(n)} /></td></tr>)}</tbody>
-            : <tbody><tr><td colSpan={5}><Empty icon={Phone} title="No numbers yet">Add one manually or click “Sync from Meta”.</Empty></td></tr></tbody>}
+            : <tbody><tr><td colSpan={6}><Empty icon={Phone} title={cf ? 'No numbers for this filter' : 'No numbers yet'}>Add one manually or click “Sync from Meta”.</Empty></td></tr></tbody>}
         </table></div>
       </Card>
     </div>
@@ -87,7 +92,7 @@ export function Numbers({ user }) {
 }
 
 // ---------------- Composer (shared) ----------------
-function Composer({ numbers, fixedNumber, fixedTo, onSent, compact }) {
+function Composer({ numbers, fixedNumber, fixedTo, onSent, compact, sendPath = '/messages/send' }) {
   const [from, setFrom] = useState(''); const [to, setTo] = useState(''); const [text, setText] = useState('')
   const [file, setFile] = useState(null); const [busy, setBusy] = useState(false); const toast = useToast()
   const fileRef = useRef()
@@ -97,7 +102,7 @@ function Composer({ numbers, fixedNumber, fixedTo, onSent, compact }) {
     const fd = new FormData()
     fd.append('phone_number_id', fixedNumber ?? from); fd.append('to', fixedTo ?? to)
     if (text) fd.append('text', text); if (file) fd.append('file', file)
-    try { const m = await api('/messages/send', { method: 'POST', form: fd }); setText(''); clearFile(); if (!compact) toast.success(`Message sent${m.wamid ? '' : ` (${m.status})`}`); onSent?.(m) }
+    try { const m = await api(sendPath, { method: 'POST', form: fd }); setText(''); clearFile(); if (!compact) toast.success(`Message sent${m.wamid ? '' : ` (${m.status})`}`); onSent?.(m) }
     catch (e) { toast.error(e.message) } finally { setBusy(false) }
   }
   const chip = file && <span className="file-chip">{file.type.startsWith('image/') ? <ImageIcon size={14} /> : <FileText size={14} />}{file.name}<button type="button" onClick={clearFile}><X size={12} /></button></span>
@@ -158,23 +163,24 @@ function Bubble({ m }) {
   </div></div>)
 }
 
-export function Chat() {
-  const [numbers] = useLoad('/phone-numbers')
+const ADMIN_EP = { numbers: '/phone-numbers', conversations: '/conversations', thread: '/messages/thread', poll: '/messages/poll', send: '/messages/send' }
+export function Chat({ ep = ADMIN_EP }) {
+  const [numbers] = useLoad(ep.numbers)
   const [filter, setFilter] = useState('')
   const [convs, setConvs] = useState(null); const [sel, setSel] = useState(null); const [msgs, setMsgs] = useState(null)
   const [search, setSearch] = useState(''); const [newTo, setNewTo] = useState(''); const [showNew, setShowNew] = useState(false)
   const lastSeen = useRef({ id: 0, upd: null }); const msgsRef = useRef()
   const numName = (id) => { const n = numbers.find((x) => x.id === id); return n ? (n.name || n.display_number) : '—' }
 
-  const loadConvs = useCallback(() => api(`/conversations${filter ? `?phone_number_id=${filter}` : ''}`).then(setConvs).catch(() => {}), [filter])
-  const loadThread = useCallback(() => { if (sel) api(`/messages/thread?phone_number_id=${sel.phone_number_id}&contact=${encodeURIComponent(sel.contact_wa_id)}`).then(setMsgs).catch(() => {}) }, [sel])
+  const loadConvs = useCallback(() => api(`${ep.conversations}${filter ? `?phone_number_id=${filter}` : ''}`).then(setConvs).catch(() => {}), [filter])
+  const loadThread = useCallback(() => { if (sel) api(`${ep.thread}?phone_number_id=${sel.phone_number_id}&contact=${encodeURIComponent(sel.contact_wa_id)}`).then(setMsgs).catch(() => {}) }, [sel])
   useEffect(() => { loadConvs() }, [loadConvs])
   useEffect(() => { setMsgs(null); loadThread() }, [loadThread])
   useEffect(() => { const el = msgsRef.current; if (el) el.scrollTop = el.scrollHeight }, [msgs?.length])
   useEffect(() => {
     const t = setInterval(async () => {
       try {
-        const p = await api('/messages/poll')
+        const p = await api(ep.poll)
         if (p.latest_id !== lastSeen.current.id || p.updated_at !== lastSeen.current.upd) { lastSeen.current = { id: p.latest_id, upd: p.updated_at }; loadConvs(); loadThread() }
       } catch { /* ignore */ }
     }, 3000)
@@ -215,7 +221,7 @@ export function Chat() {
           <div className="grow"><b>{title}</b><small className="muted">+{sel.contact_wa_id} · via {numName(sel.phone_number_id)}</small></div></header>
         <div className="msgs" ref={msgsRef}>{msgs === null ? <div className="center-pad"><Skeleton w="40%" h={36} /><Skeleton w="55%" h={36} style={{ alignSelf: 'flex-end' }} /></div>
           : msgs.map((m) => <Bubble key={m.id} m={m} />)}</div>
-        <Composer compact numbers={numbers} fixedNumber={sel.phone_number_id} fixedTo={sel.contact_wa_id} onSent={() => { loadThread(); loadConvs() }} />
+        <Composer compact sendPath={ep.send} numbers={numbers} fixedNumber={sel.phone_number_id} fixedTo={sel.contact_wa_id} onSent={() => { loadThread(); loadConvs() }} />
       </>) : <div className="thread-empty"><span className="te-ico"><MessageCircle size={40} /></span><h3>WhatsApp Business Inbox</h3><p>Select a conversation to read and reply.<br />New messages arrive automatically every few seconds.</p></div>}
     </section>
   </div>)

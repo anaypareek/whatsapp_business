@@ -24,8 +24,26 @@ curl "${H[@]}" -H 'Content-Type: application/json' -d '{"name":"Op","email":"op@
 curl "${H[@]}" -X DELETE $B/users/2
 ```
 
+## Clients (admin)
+```bash
+curl "${H[@]}" "$B/clients?q=oswal&status=active"      # withCount numbers/templates + phone_numbers list
+curl "${H[@]}" -H 'Content-Type: application/json' -d '{"name":"Ravi","company":"Oswal Retail","email":"ravi@x.com","password":"secret123","is_active":true}' $B/clients
+curl "${H[@]}" -X PUT -H 'Content-Type: application/json' -d '{"is_active":false}' $B/clients/1   # deactivate (revokes tokens)
+curl "${H[@]}" -X POST -H 'Content-Type: application/json' -d '{}' $B/clients/1/reset-password     # {} = generate; returns {password} once
+curl "${H[@]}" -X DELETE $B/clients/1                   # numbers/templates are unassigned, not deleted
+curl "${H[@]}" $B/clients-list                          # id/name/company for dropdowns
+curl "${H[@]}" -X PUT -H 'Content-Type: application/json' -d '{"client_id":1}' $B/templates/5/client
+```
+
+## Client portal (`/api/client/*`, client token)
+`POST /client/auth/login {email,password}` → `{token, client}` (inactive → 403). With `Authorization: Bearer <client token>`:
+`GET /client/auth/me`, `POST /client/auth/logout`, `GET /client/dashboard`, `GET /client/numbers`, `GET /client/templates`,
+`GET /client/conversations`, `GET /client/messages/thread`, `GET /client/messages/poll` (same query params as the admin chat endpoints),
+`POST /client/messages/send` (same body as the portal send). Everything is limited to the client's own numbers; any other number gives 404.
+
 ## Number Master
 ```bash
+curl "${H[@]}" "$B/phone-numbers?client_id=1"           # or client_id=none; each row includes client
 curl "${H[@]}" $B/phone-numbers
 curl "${H[@]}" -H 'Content-Type: application/json' -d '{"phone_number_id":"1234567890","display_number":"+91 98765 43210","name":"Oswal Soap"}' $B/phone-numbers
 curl "${H[@]}" -X PUT -H 'Content-Type: application/json' -d '{"name":"Sales"}' $B/phone-numbers/1

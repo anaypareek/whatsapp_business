@@ -15,6 +15,7 @@ class MessageTemplate extends Model
     protected $casts = ['components' => 'array', 'last_synced_at' => 'datetime'];
     protected $appends = ['edit_check', 'body_variable_count', 'header_variable_count', 'header_format'];
 
+    public function client() { return $this->belongsTo(Client::class); }
     public function edits() { return $this->hasMany(TemplateEdit::class); }
     public function events() { return $this->hasMany(TemplateEvent::class); }
 

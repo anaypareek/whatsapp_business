@@ -1,9 +1,14 @@
-const KEY = 'wab_token'
+let KEY = 'wab_token'
+/** Each app (admin / client portal) keeps its own token. */
+export const setTokenKey = (k) => { KEY = k }
 export const getToken = () => localStorage.getItem(KEY) || sessionStorage.getItem(KEY)
 export const setToken = (t, remember = true) => {
   localStorage.removeItem(KEY); sessionStorage.removeItem(KEY)
   if (t) (remember ? localStorage : sessionStorage).setItem(KEY, t)
 }
+
+let API_PREFIX = '/api'
+export const setApiPrefix = (p) => { API_PREFIX = p }
 
 export async function api(path, { method = 'GET', body, form } = {}) {
   const headers = { Accept: 'application/json' }
@@ -12,7 +17,7 @@ export async function api(path, { method = 'GET', body, form } = {}) {
   let payload
   if (form) payload = form
   else if (body !== undefined) { headers['Content-Type'] = 'application/json'; payload = JSON.stringify(body) }
-  const res = await fetch(`/api${path}`, { method, headers, body: payload })
+  const res = await fetch(`${API_PREFIX}${path}`, { method, headers, body: payload })
   if (res.status === 401 && path !== '/auth/login') { setToken(null); window.location.reload() }
   if (res.status === 204) return null
   const data = await res.json().catch(() => ({}))

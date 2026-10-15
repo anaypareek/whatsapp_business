@@ -66,11 +66,17 @@ For the local demo `api/.env` has `META_GRAPH_BASE=http://127.0.0.1:8099`, serve
 - Downloading inbound media from Meta (inbound media is shown as a placeholder with its media id).
 - Queued/async sending and auto-retry; real-time push (uses polling).
 
+## Clients and client portal
+- **Admin → Clients** (`/wab-control-7x/clients`): create clients (name, company, login email, password with show/hide and generate, active/inactive status). You can also edit them, reset a password (you set it, or one is generated and shown once; this logs the client out), and deactivate or activate them. Deactivating revokes the client's tokens. The table shows each client's numbers and template count.
+- **Number Master** has a searchable Client dropdown on add/edit (or *No client*), a Client column and a client filter.
+- **Template Master** detail panel lets you assign a template to a client. This assignment is local only and is not sent to Meta.
+- Staff tokens and client tokens are kept apart (`EnsureStaff` / `EnsureClient` middleware). A client token gets 403 on every admin endpoint.
+
 ## Admin path
 The admin panel is served at **`/wab-control-7x`** (login: `/wab-control-7x/login`), not `/admin`. It is set in one place,
 `VITE_ADMIN_BASE` (see `web/.env.example`, read by `web/src/config.js` and `web/vite.config.js`). To change it:
 1. `VITE_ADMIN_BASE=/your-path npm run build` in `web/`.
 2. Replace `wab-control-7x` in the root `.htaccess` (`deploy/hostgator-root.htaccess`) with the same path.
 
-`/` serves a neutral public page (`web/site/index.html`) with no admin link. `/admin` and every other unknown path return
+`/` is the **client portal** (`web/index.html`, its own Vite entry, so its bundle has no admin path and no link to it). Clients log in at `/login` and see only the numbers assigned to them: dashboard, chats and sending, numbers, and templates. The admin panel is a separate entry (`web/admin.html`). `/admin` and every other unknown path return
 `web/site/404.html` with HTTP 404. `/api/*`, `/storage/*` and `/up` still go to Laravel.

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { FileText, Plus, RefreshCw, Pencil, Trash2, Send, Search, X, Lock, Eye, History, Phone, Hash, Link2, Reply, PhoneCall } from 'lucide-react'
 import { api, fmtTime } from './api'
+import { ClientSelect } from './clients'
 import { Button, Card, PageHeader, Field, TableSkeleton, Empty, Badge as UiBadge, useToast } from './ui'
 
 export const LANGS = ['en_US', 'en', 'en_GB', 'hi', 'mr', 'gu', 'bn', 'ta', 'te', 'kn', 'ml', 'pa', 'ur', 'ar', 'es', 'fr', 'de', 'pt_BR', 'id']
@@ -96,6 +97,8 @@ function TemplateForm({ initial, editing, onDone, onCancel }) {
 }
 
 export function Templates() {
+  const [clients, setClients] = useState([])
+  useEffect(() => { api('/clients-list').then(setClients).catch(() => {}) }, [])
   const [rows, setRows] = useState(null); const [flt, setFlt] = useState({ status: '', category: '', language: '', q: '' })
   const [mode, setMode] = useState(null); const toast = useToast()
   const load = useCallback(() => { const qs = new URLSearchParams(Object.entries(flt).filter(([, v]) => v)).toString(); return api(`/templates?${qs}`).then(setRows).catch((e) => toast.error(e.message)) }, [flt]) // eslint-disable-line
@@ -125,7 +128,7 @@ export function Templates() {
         <select value={flt.language} onChange={(e) => setFlt({ ...flt, language: e.target.value })}><option value="">All languages</option>{langs.map((l) => <option key={l}>{l}</option>)}</select></div>}>
         <div className="table-wrap"><table className="table"><thead><tr><th>Template</th><th>Category</th><th>Status</th><th>Quality</th><th>Vars</th><th /></tr></thead>
           {rows === null ? <TableSkeleton cols={6} /> : all.length ? <tbody>{all.map((t) => <tr key={t.id} className={`clickable ${mode?.view?.id === t.id ? 'sel' : ''}`} onClick={() => view(t)}>
-            <td><b>{t.name}</b><small className="block muted">{t.language}</small>{t.rejected_reason && <small className="block err-text">Rejected: {t.rejected_reason}</small>}</td>
+            <td><b>{t.name}</b><small className="block muted">{t.language}{t.client ? ` · ${t.client.name}` : ''}</small>{t.rejected_reason && <small className="block err-text">Rejected: {t.rejected_reason}</small>}</td>
             <td>{t.category}{t.previous_category && <small className="block muted">was {t.previous_category}</small>}</td>
             <td><Badge s={t.status} /></td><td>{t.quality_score ? <span className={`q ${t.quality_score.toLowerCase()}`}>● {t.quality_score}</span> : <span className="muted">—</span>}</td>
             <td>{t.body_variable_count}{t.header_format && t.header_format !== 'TEXT' ? ` + ${t.header_format.toLowerCase()}` : ''}{t.header_variable_count ? ' + hdr' : ''}</td>
@@ -141,6 +144,8 @@ export function Templates() {
         {!mode.view.edit_check.allowed && <div className="alert info"><Lock size={14} /> {mode.view.edit_check.reason}</div>}
         <Preview form={toForm(mode.view)} />
         <div className="row"><Button size="sm" icon={Pencil} onClick={() => edit(mode.view)} disabled={!mode.view.edit_check.allowed}>Edit</Button></div>
+        <Field label="Client" hint="Shown in that client's portal and counted on the Clients page"><ClientSelect clients={clients} value={mode.view.client_id ? String(mode.view.client_id) : ''}
+          onChange={async (v) => { try { const t = await api(`/templates/${mode.view.id}/client`, { method: 'PUT', body: { client_id: v || null } }); setMode({ view: { ...mode.view, client_id: t.client_id, client: t.client } }); toast.success('Client updated'); load() } catch (e) { toast.error(e.message) } }} /></Field>
         <h4 className="sub-h"><History size={14} /> Status history</h4>
         <ul className="timeline">{(mode.view.events || []).map((ev) => <li key={ev.id}><b>{ev.event}</b> <span className="muted">{ev.field.replace('message_template_', '').replace(/_/g, ' ')}</span>{ev.reason && <div className="small">{ev.reason}</div>}<small className="muted">{fmtTime(ev.created_at)}</small></li>)}</ul>
         {!mode.view.events?.length && <p className="muted small">No webhook events yet.</p>}

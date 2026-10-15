@@ -5,7 +5,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class PhoneNumber extends Model
 {
-    protected $fillable = ['phone_number_id', 'display_number', 'name', 'waba_id', 'quality_rating', 'status'];
+    protected $fillable = ['client_id', 'phone_number_id', 'display_number', 'name', 'waba_id', 'quality_rating', 'status'];
+    public function client() { return $this->belongsTo(Client::class); }
     public function messages() { return $this->hasMany(Message::class); }
 
     /** Resolve by local id, Meta phone_number_id, or display number (digits). */

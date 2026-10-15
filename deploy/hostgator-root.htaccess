@@ -38,17 +38,20 @@ RewriteRule ^storage/(.+)$ api/public/storage/$1 [END]
 # API + health check -> Laravel front controller
 RewriteRule ^(api|up)(/.*)?$ api/public/index.php [END]
 
-# Public 404 page + landing page (no admin links)
-RewriteRule ^web/site/(index|404)\.html$ - [END]
+# Public 404 page
+RewriteRule ^web/site/404\.html$ - [END]
 
-# Admin panel (SPA). Must match VITE_ADMIN_BASE used at build time (default /wab-control-7x).
+# Built assets (shared by both apps; hashed file names)
+RewriteCond %{DOCUMENT_ROOT}/web/dist/assets/$1 -f
+RewriteRule ^assets/(.+)$ web/dist/assets/$1 [END]
+RewriteRule ^(favicon\.svg|icons\.svg)$ web/dist/$1 [END]
+
+# Admin panel. Must match VITE_ADMIN_BASE used at build time (default /wab-control-7x).
 RewriteRule ^wab-control-7x$ /wab-control-7x/ [R=302,L]
-RewriteCond %{DOCUMENT_ROOT}/web/dist/$1 -f
-RewriteRule ^wab-control-7x/(.+)$ web/dist/$1 [END]
-RewriteRule ^wab-control-7x/ web/dist/index.html [END]
+RewriteRule ^wab-control-7x/ web/dist/admin.html [END]
 
-# Public landing page at /
-RewriteRule ^$ web/site/index.html [END]
+# Client portal at / (explicit routes only)
+RewriteRule ^(login|dashboard|chats|numbers|templates)?/?$ web/dist/index.html [END]
 
 # Everything else (including /admin) -> 404
 RewriteRule ^ - [R=404,L]

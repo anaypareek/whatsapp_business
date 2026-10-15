@@ -1,19 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
-import { LayoutDashboard, MessagesSquare, Send, FileText, Phone, Bot, Users as UsersIcon, KeyRound, Settings as SettingsIcon, LogOut, Menu, ChevronDown, Bell, MessageCircle } from 'lucide-react'
+import { LayoutDashboard, MessagesSquare, Send, FileText, Phone, Bot, Users as UsersIcon, KeyRound, Settings as SettingsIcon, LogOut, Menu, ChevronDown, Bell, MessageCircle, Briefcase } from 'lucide-react'
 import { api, getToken, setToken } from './api'
 import { Spinner } from './ui'
 import { ADMIN_BASE } from './config'
 import Login from './Login'
 import Dashboard from './Dashboard'
 import { Templates } from './templates'
+import { Clients } from './clients'
 import { Users, Numbers, SendMessage, Chat, AutoReplies, Settings, ApiKeys } from './pages'
 
 const NAV = [
   { group: 'Overview', items: [['dashboard', 'Dashboard', LayoutDashboard]] },
   { group: 'Messaging', items: [['chat', 'Chat Master', MessagesSquare], ['send', 'Send Message', Send], ['templates', 'Template Master', FileText], ['rules', 'Auto-replies', Bot]] },
-  { group: 'Setup', items: [['numbers', 'Number Master', Phone], ['users', 'Users', UsersIcon, true], ['keys', 'API Keys', KeyRound, true], ['settings', 'Settings', SettingsIcon, true]] },
+  { group: 'Setup', items: [['clients', 'Clients', Briefcase, true], ['numbers', 'Number Master', Phone], ['users', 'Users', UsersIcon, true], ['keys', 'API Keys', KeyRound, true], ['settings', 'Settings', SettingsIcon, true]] },
 ]
-const PAGES = { dashboard: Dashboard, chat: Chat, send: SendMessage, templates: Templates, numbers: Numbers, rules: AutoReplies, users: Users, keys: ApiKeys, settings: Settings }
+const PAGES = { clients: Clients, dashboard: Dashboard, chat: Chat, send: SendMessage, templates: Templates, numbers: Numbers, rules: AutoReplies, users: Users, keys: ApiKeys, settings: Settings }
 const TITLES = Object.fromEntries(NAV.flatMap((g) => g.items.map(([k, l]) => [k, l])))
 
 export default function App() {

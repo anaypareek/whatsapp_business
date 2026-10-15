@@ -62,10 +62,32 @@ RewriteRule ^(.*)$ whatsapp-business/api/public/$1 [L]
 ```
 (Only if the project sits inside `public_html`. Then make sure `.env` isn't web-readable: Laravel's root has no index, but add `Deny from all` in `api/.htaccess`.)
 
+### Updating the live site after `git pull` (clients + client portal release)
+Run these on the server over SSH, from the domain root (`~/whatsappwork.fineoutput.com`):
+```bash
+PHP=/opt/cpanel/ea-php83/root/usr/bin/php
+cd ~/whatsappwork.fineoutput.com
+git pull origin main
+cd api
+$PHP ~/composer.phar install --no-dev --optimize-autoloader
+$PHP artisan migrate --force          # adds the clients table and client_id on phone_numbers/message_templates
+$PHP artisan config:cache && $PHP artisan route:cache && $PHP artisan view:cache
+cd ..
+cp deploy/hostgator-root.htaccess .htaccess   # new routing: portal at /, admin at /wab-control-7x/
+rm -f web/site/index.html                     # old landing page, now replaced by the client portal
+```
+Then build the frontend **on your machine** (HostGator shared hosting has no Node) and upload it:
+```bash
+cd web && npm ci && VITE_ADMIN_BASE=/wab-control-7x npm run build
+rsync -av --delete -e 'ssh -p 2222' dist/ fineo1l1@103.53.42.51:whatsappwork.fineoutput.com/web/dist/
+```
+Check: `https://whatsappwork.fineoutput.com/login` (client login), `/wab-control-7x/login` (admin), and `/admin` should return 404.
+Then create clients under **Admin → Clients** and assign numbers to them in **Number Master**.
+
 ### 6. Frontend (build locally, upload dist)
 > **Live layout (whatsappwork.fineoutput.com):** the repo sits in the domain's document root. The root `.htaccess` is
 > `deploy/hostgator-root.htaccess`. It sends `/api`, `/storage` and `/up` to Laravel, serves the admin SPA from `web/dist` at
-> **`/wab-control-7x/`** (build with `VITE_ADMIN_BASE=/wab-control-7x npm run build`), serves `web/site/index.html` at `/`, and returns
+> **`/wab-control-7x/`** (build with `VITE_ADMIN_BASE=/wab-control-7x npm run build`), serves the **client portal** (`web/dist/index.html`) at `/`, `/login`, `/dashboard`, `/chats`, `/numbers` and `/templates`, serves hashed bundles at `/assets/*`, and returns
 > `web/site/404.html` (HTTP 404) for everything else, including `/admin`. It also blocks dotfiles, `docs/`, `tools/`, `README.md` and `secrets/`.
 > If you change the admin path, change it in both `VITE_ADMIN_BASE` and the `.htaccess`. Never link the admin path from public pages.
 

@@ -14,8 +14,9 @@ class TemplateController extends Controller
 {
     public function index(Request $r)
     {
-        $q = MessageTemplate::query()->orderBy('name')->orderBy('language');
+        $q = MessageTemplate::with('client:id,name,company')->orderBy('name')->orderBy('language');
         foreach (['status', 'category', 'language'] as $f) if ($r->filled($f)) $q->where($f, $r->input($f));
+        if ($r->filled('client_id')) $r->client_id === 'none' ? $q->whereNull('client_id') : $q->where('client_id', $r->client_id);
         if ($r->filled('q')) $q->where('name', 'like', '%'.$r->q.'%');
         return $q->get();
     }
@@ -68,6 +69,14 @@ class TemplateController extends Controller
         }
         $template->delete();
         return response()->noContent();
+    }
+
+    /** Assign a template to a client (local only; Meta has no such concept). */
+    public function assignClient(Request $r, MessageTemplate $template)
+    {
+        $d = $r->validate(['client_id' => 'nullable|exists:clients,id']);
+        $template->update(['client_id' => $d['client_id'] ?? null]);
+        return $template->load('client:id,name,company');
     }
 
     public function sync(WhatsAppService $wa)
