@@ -1,0 +1,42 @@
+# WhatsApp Business portal: same-domain routing (SPA + Laravel API)
+Options -Indexes -MultiViews
+DirectoryIndex index.html
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+<FilesMatch "^\.(?!well-known)">
+  Require all denied
+</FilesMatch>
+
+RewriteEngine On
+RewriteBase /
+
+# Force HTTPS (leave ACME challenge on http for AutoSSL)
+RewriteCond %{HTTPS} !=on
+RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+RewriteCond %{REQUEST_URI} !^/\.well-known/
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Pass Authorization header to PHP
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+RewriteRule ^\.well-known/ - [END]
+
+# Block dotfiles/dirs (.env, .git, …), repo files and source folders
+RewriteRule (^|/)\. - [F,END]
+RewriteRule ^(README\.md|docs|tools|secrets)(/|$) - [F,END]
+
+# Uploaded media
+RewriteCond %{DOCUMENT_ROOT}/api/public/storage/$1 -f
+RewriteRule ^storage/(.+)$ api/public/storage/$1 [END]
+
+# API + health check -> Laravel front controller
+RewriteRule ^(api|up)(/.*)?$ api/public/index.php [END]
+
+# SPA: built assets, else index.html
+RewriteCond %{DOCUMENT_ROOT}/web/dist/$1 -f
+RewriteRule ^(.+)$ web/dist/$1 [END]
+RewriteRule ^ web/dist/index.html [END]
