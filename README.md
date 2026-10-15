@@ -4,7 +4,7 @@ Owner: Vibhav Pareek · timezone Asia/Kolkata. Built on Meta WhatsApp Cloud API 
 
 ```
 api/      Laravel 13 API (Sanctum, MySQL/MariaDB)     → http://localhost:8020
-web/      React + Vite frontend (proxies /api)         → http://localhost:5190
+web/      React + Vite admin panel (proxies /api)      → http://localhost:5190/wab-control-7x/
 docs/     meta-api-notes.md, API.md (curl examples)
 secrets/  admin-credentials.txt (chmod 600)
 tools/    mock-meta.php (local fake Graph API), e2e-curl.sh (end-to-end smoke test)
@@ -65,3 +65,12 @@ For the local demo `api/.env` has `META_GRAPH_BASE=http://127.0.0.1:8099`, serve
 - AUTHENTICATION templates (OTP/COPY_CODE buttons), carousel, LTO and Flow buttons are not in the form (sync shows them).
 - Downloading inbound media from Meta (inbound media is shown as a placeholder with its media id).
 - Queued/async sending and auto-retry; real-time push (uses polling).
+
+## Admin path
+The admin panel is served at **`/wab-control-7x`** (login: `/wab-control-7x/login`), not `/admin`. It is set in one place,
+`VITE_ADMIN_BASE` (see `web/.env.example`, read by `web/src/config.js` and `web/vite.config.js`). To change it:
+1. `VITE_ADMIN_BASE=/your-path npm run build` in `web/`.
+2. Replace `wab-control-7x` in the root `.htaccess` (`deploy/hostgator-root.htaccess`) with the same path.
+
+`/` serves a neutral public page (`web/site/index.html`) with no admin link. `/admin` and every other unknown path return
+`web/site/404.html` with HTTP 404. `/api/*`, `/storage/*` and `/up` still go to Laravel.

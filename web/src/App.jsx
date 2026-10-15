@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { LayoutDashboard, MessagesSquare, Send, FileText, Phone, Bot, Users as UsersIcon, KeyRound, Settings as SettingsIcon, LogOut, Menu, ChevronDown, Bell, MessageCircle } from 'lucide-react'
 import { api, getToken, setToken } from './api'
 import { Spinner } from './ui'
+import { ADMIN_BASE } from './config'
 import Login from './Login'
 import Dashboard from './Dashboard'
 import { Templates } from './templates'
@@ -17,7 +18,8 @@ const TITLES = Object.fromEntries(NAV.flatMap((g) => g.items.map(([k, l]) => [k,
 
 export default function App() {
   const [user, setUser] = useState(null)
-  const [tab, setTab] = useState(() => (location.hash.slice(1) in PAGES ? location.hash.slice(1) : 'dashboard'))
+  const fromPath = () => { const seg = location.pathname.slice(ADMIN_BASE.length).replace(/^\/+|\/+$/g, ''); return seg in PAGES ? seg : 'dashboard' }
+  const [tab, setTab] = useState(fromPath)
   const [booting, setBooting] = useState(!!getToken())
   const [navOpen, setNavOpen] = useState(false)
   const [menu, setMenu] = useState(false)
@@ -25,7 +27,14 @@ export default function App() {
   const menuRef = useRef()
 
   useEffect(() => { if (getToken()) api('/auth/me').then(setUser).catch(() => setToken(null)).finally(() => setBooting(false)) }, [])
-  useEffect(() => { location.hash = tab; setNavOpen(false) }, [tab])
+  // path-based routing under ADMIN_BASE: /<base>/login, /<base>/<page>
+  useEffect(() => {
+    const want = user ? `${ADMIN_BASE}/${tab}` : `${ADMIN_BASE}/login`
+    if (!booting && location.pathname !== want) history.replaceState(null, '', want)
+    setNavOpen(false)
+  }, [tab, user, booting])
+  useEffect(() => { const f = () => setTab(fromPath()); window.addEventListener('popstate', f); return () => window.removeEventListener('popstate', f) }, []) // eslint-disable-line
+  const go = (k) => { if (k !== tab) history.pushState(null, '', `${ADMIN_BASE}/${k}`); setTab(k) }
   useEffect(() => { const c = (e) => menuRef.current && !menuRef.current.contains(e.target) && setMenu(false); document.addEventListener('mousedown', c); return () => document.removeEventListener('mousedown', c) }, [])
   useEffect(() => {
     if (!user) return
@@ -34,11 +43,10 @@ export default function App() {
   }, [user])
 
   if (booting) return <div className="boot"><Spinner size={28} /></div>
-  if (!user) return <Login onLogin={(u) => { setUser(u); setTab('dashboard') }} />
+  if (!user) return <Login onLogin={(u) => { setUser(u); history.replaceState(null, '', `${ADMIN_BASE}/dashboard`); setTab('dashboard') }} />
 
   const logout = async () => { try { await api('/auth/logout', { method: 'POST' }) } catch { /* ignore */ } setToken(null); setUser(null) }
   const Page = PAGES[tab]
-  const go = (k) => setTab(k)
 
   return (
     <div className={`layout ${navOpen ? 'nav-open' : ''}`}>

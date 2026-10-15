@@ -1,6 +1,8 @@
 # WhatsApp Business portal: same-domain routing (SPA + Laravel API)
 Options -Indexes -MultiViews
-DirectoryIndex index.html
+DirectoryIndex disabled
+ErrorDocument 404 /web/site/404.html
+ErrorDocument 403 /web/site/404.html
 <IfModule mod_headers.c>
   Header always set X-Content-Type-Options "nosniff"
   Header always set X-Frame-Options "SAMEORIGIN"
@@ -36,7 +38,17 @@ RewriteRule ^storage/(.+)$ api/public/storage/$1 [END]
 # API + health check -> Laravel front controller
 RewriteRule ^(api|up)(/.*)?$ api/public/index.php [END]
 
-# SPA: built assets, else index.html
+# Public 404 page + landing page (no admin links)
+RewriteRule ^web/site/(index|404)\.html$ - [END]
+
+# Admin panel (SPA). Must match VITE_ADMIN_BASE used at build time (default /wab-control-7x).
+RewriteRule ^wab-control-7x$ /wab-control-7x/ [R=302,L]
 RewriteCond %{DOCUMENT_ROOT}/web/dist/$1 -f
-RewriteRule ^(.+)$ web/dist/$1 [END]
-RewriteRule ^ web/dist/index.html [END]
+RewriteRule ^wab-control-7x/(.+)$ web/dist/$1 [END]
+RewriteRule ^wab-control-7x/ web/dist/index.html [END]
+
+# Public landing page at /
+RewriteRule ^$ web/site/index.html [END]
+
+# Everything else (including /admin) -> 404
+RewriteRule ^ - [R=404,L]

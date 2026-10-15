@@ -63,6 +63,12 @@ RewriteRule ^(.*)$ whatsapp-business/api/public/$1 [L]
 (Only if the project sits inside `public_html`. Then make sure `.env` isn't web-readable: Laravel's root has no index, but add `Deny from all` in `api/.htaccess`.)
 
 ### 6. Frontend (build locally, upload dist)
+> **Live layout (whatsappwork.fineoutput.com):** the repo sits in the domain's document root. The root `.htaccess` is
+> `deploy/hostgator-root.htaccess`. It sends `/api`, `/storage` and `/up` to Laravel, serves the admin SPA from `web/dist` at
+> **`/wab-control-7x/`** (build with `VITE_ADMIN_BASE=/wab-control-7x npm run build`), serves `web/site/index.html` at `/`, and returns
+> `web/site/404.html` (HTTP 404) for everything else, including `/admin`. It also blocks dotfiles, `docs/`, `tools/`, `README.md` and `secrets/`.
+> If you change the admin path, change it in both `VITE_ADMIN_BASE` and the `.htaccess`. Never link the admin path from public pages.
+
 The frontend calls relative `/api/...`. In production either serve it from the same host as the API (see *Single domain*) or set an API
 base URL. To use a separate host, change `fetch(\`/api${path}\`` in `web/src/api.js` to
 `fetch(\`${import.meta.env.VITE_API_BASE || ''}/api${path}\``, then:
