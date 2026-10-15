@@ -12,6 +12,7 @@ Route::post('/webhook/whatsapp', [Api\WebhookController::class, 'receive']);
 Route::post('/v1/messages/send', Api\ExternalSendController::class)->middleware([ApiKeyAuth::class, 'throttle:120,1']);
 
 Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/dashboard', Api\DashboardController::class);
     Route::get('/auth/me', [Api\AuthController::class, 'me']);
     Route::post('/auth/logout', [Api\AuthController::class, 'logout']);
 

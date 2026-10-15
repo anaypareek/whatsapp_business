@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { FileText, Plus, RefreshCw, Pencil, Trash2, Send, Search, X, Lock, Eye, History, Phone, Hash, Link2, Reply, PhoneCall } from 'lucide-react'
 import { api, fmtTime } from './api'
+import { Button, Card, PageHeader, Field, TableSkeleton, Empty, Badge as UiBadge, useToast } from './ui'
 
 export const LANGS = ['en_US', 'en', 'en_GB', 'hi', 'mr', 'gu', 'bn', 'ta', 'te', 'kn', 'ml', 'pa', 'ur', 'ar', 'es', 'fr', 'de', 'pt_BR', 'id']
 const STATUSES = ['APPROVED', 'PENDING', 'REJECTED', 'PAUSED', 'DISABLED', 'IN_APPEAL']
@@ -8,13 +10,13 @@ const countVars = (s) => Math.max(0, ...[...(s || '').matchAll(/\{\{\s*(\d+)\s*\
 const fmtWa = (s) => (s || '').split(/(\*[^*\n]+\*|_[^_\n]+_|~[^~\n]+~)/g).map((p, i) =>
   /^\*.+\*$/.test(p) ? <b key={i}>{p.slice(1, -1)}</b> : /^_.+_$/.test(p) ? <i key={i}>{p.slice(1, -1)}</i> : /^~.+~$/.test(p) ? <s key={i}>{p.slice(1, -1)}</s> : p)
 
-export const Badge = ({ s }) => <span className={`tbadge ${(s || '').toLowerCase()}`}>{s}</span>
+export const Badge = ({ s }) => <UiBadge s={s} />
 
 /** WhatsApp-style preview from a form object {header, body, footer, buttons} with variable values. */
 export function Preview({ form, headerVal, bodyVals, buttonVals }) {
   const h = form.header || {}
   const fmt = h.format || 'NONE'
-  return (<div className="wa-preview"><div className="bubble out tpl">
+  return (<div className="wa-preview"><div className="wa-preview-top"><span className="avatar sm">OS</span><b>Oswal Soap</b></div><div className="wa-preview-body"><div className="bubble out tpl">
     {fmt === 'TEXT' && <div className="tpl-h">{fill(h.text, [headerVal ?? h.example])}</div>}
     {fmt === 'IMAGE' && (headerVal && /^https?:/.test(headerVal) ? <img src={headerVal} alt="" /> : <div className="tpl-media">🖼 Image</div>)}
     {fmt === 'VIDEO' && <div className="tpl-media">🎬 Video</div>}
@@ -22,9 +24,9 @@ export function Preview({ form, headerVal, bodyVals, buttonVals }) {
     <div className="text">{fmtWa(fill(form.body?.text, bodyVals ?? form.body?.examples)) || <span className="muted">Body text…</span>}</div>
     {form.footer && <div className="tpl-f">{form.footer}</div>}
     <div className="meta">{fmtTime(new Date().toISOString())}</div>
-    {(form.buttons || []).map((b, i) => <div key={i} className="tpl-btn">{b.type === 'URL' ? '↗ ' : b.type === 'PHONE_NUMBER' ? '📞 ' : '↩ '}{b.text || 'Button'}
+    {(form.buttons || []).map((b, i) => <div key={i} className="tpl-btn">{b.type === 'URL' ? <Link2 size={14} /> : b.type === 'PHONE_NUMBER' ? <PhoneCall size={14} /> : <Reply size={14} />}{b.text || 'Button'}
       {b.type === 'URL' && countVars(b.url) > 0 && <small className="muted"> {fill(b.url, [buttonVals?.[i] ?? b.example?.replace(/.*\//, '')])}</small>}</div>)}
-  </div></div>)
+  </div></div></div>)
 }
 
 /** Meta components -> form */
@@ -43,130 +45,140 @@ const blankForm = () => ({ name: '', language: 'en_US', category: 'UTILITY', hea
 
 function TemplateForm({ initial, editing, onDone, onCancel }) {
   const [f, setF] = useState(initial)
-  const [err, setErr] = useState(''); const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState(false); const toast = useToast()
   const n = countVars(f.body.text)
   const set = (patch) => setF({ ...f, ...patch })
   const setH = (patch) => set({ header: { ...f.header, ...patch } })
   const setBtn = (i, patch) => set({ buttons: f.buttons.map((b, j) => (j === i ? { ...b, ...patch } : b)) })
   const save = async (e) => {
-    e.preventDefault(); setErr(''); setBusy(true)
+    e.preventDefault(); setBusy(true)
     const body = { ...f, header: f.header.format === 'NONE' ? null : f.header, body: { text: f.body.text, examples: f.body.examples.slice(0, n) }, footer: f.footer || null }
     try { await api(editing ? `/templates/${editing.id}` : '/templates', { method: editing ? 'PUT' : 'POST', body }); onDone() }
-    catch (e) { setErr(e.message) } finally { setBusy(false) }
+    catch (e) { toast.error(e.message) } finally { setBusy(false) }
   }
-  return (<div className="tplform">
-    <form className="card stack grow" onSubmit={save}>
-      <h3>{editing ? `Edit ${editing.name} (${editing.language})` : 'New template'}</h3>
-      {editing && <p className="muted small">Name and language can’t be changed. Approved templates: category locked, max 1 edit / 24h and 10 / 30 days. Edited templates go back to review.</p>}
-      <div className="row">
-        <input className="grow" placeholder="name (lowercase_with_underscores)" disabled={!!editing} value={f.name} onChange={(e) => set({ name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })} />
-        <select disabled={!!editing} value={f.language} onChange={(e) => set({ language: e.target.value })}>{LANGS.map((l) => <option key={l}>{l}</option>)}</select>
-        <select disabled={editing?.status === 'APPROVED'} value={f.category} onChange={(e) => set({ category: e.target.value })}><option>UTILITY</option><option>MARKETING</option><option>AUTHENTICATION</option></select>
-      </div>
-      <label>Header
-        <div className="row"><select value={f.header.format} onChange={(e) => setH({ format: e.target.value })}>{['NONE', 'TEXT', 'IMAGE', 'DOCUMENT', 'VIDEO'].map((x) => <option key={x}>{x}</option>)}</select>
-          {f.header.format === 'TEXT' && <input className="grow" maxLength={60} placeholder="Header text (max 60, one {{1}} allowed)" value={f.header.text} onChange={(e) => setH({ text: e.target.value })} />}
-          {f.header.format === 'TEXT' && countVars(f.header.text) > 0 && <input placeholder="Example for {{1}}" value={f.header.example} onChange={(e) => setH({ example: e.target.value })} />}
-          {['IMAGE', 'DOCUMENT', 'VIDEO'].includes(f.header.format) && <input className="grow" placeholder="Sample header_handle (from Meta Resumable Upload API)" value={f.header.example} onChange={(e) => setH({ example: e.target.value })} />}
-        </div></label>
-      <label>Body <small className="muted">({f.body.text.length}/1024) — use {'{{1}}'}, {'{{2}}'}… and *bold* _italic_</small>
-        <textarea rows={5} maxLength={1024} value={f.body.text} onChange={(e) => set({ body: { ...f.body, text: e.target.value } })} /></label>
-      {n > 0 && <div className="row">{Array.from({ length: n }, (_, i) => <input key={i} placeholder={`Example {{${i + 1}}}`} value={f.body.examples[i] || ''}
-        onChange={(e) => { const ex = [...f.body.examples]; ex[i] = e.target.value; set({ body: { ...f.body, examples: ex } }) }} />)}</div>}
-      <label>Footer (optional, max 60)<input maxLength={60} value={f.footer} onChange={(e) => set({ footer: e.target.value })} /></label>
-      <div>Buttons <button type="button" disabled={f.buttons.length >= 10} onClick={() => set({ buttons: [...f.buttons, { type: 'QUICK_REPLY', text: '', url: '', phone_number: '', example: '' }] })}>+ Add</button></div>
-      {f.buttons.map((b, i) => <div className="row" key={i}>
-        <select value={b.type} onChange={(e) => setBtn(i, { type: e.target.value })}><option>QUICK_REPLY</option><option>URL</option><option>PHONE_NUMBER</option></select>
-        <input maxLength={25} placeholder="Button text" value={b.text} onChange={(e) => setBtn(i, { text: e.target.value })} />
-        {b.type === 'URL' && <input className="grow" placeholder="https://… (optional {{1}} at end)" value={b.url} onChange={(e) => setBtn(i, { url: e.target.value })} />}
-        {b.type === 'URL' && countVars(b.url) > 0 && <input placeholder="Example full URL" value={b.example} onChange={(e) => setBtn(i, { example: e.target.value })} />}
-        {b.type === 'PHONE_NUMBER' && <input placeholder="+919876543210" value={b.phone_number} onChange={(e) => setBtn(i, { phone_number: e.target.value })} />}
-        <button type="button" className="danger" onClick={() => set({ buttons: f.buttons.filter((_, j) => j !== i) })}>✕</button></div>)}
-      {err && <div className="err">{err}</div>}
-      <div className="row"><button className="primary" disabled={busy}>{busy ? 'Submitting…' : editing ? 'Submit edit to Meta' : 'Submit to Meta for review'}</button><button type="button" onClick={onCancel}>Cancel</button></div>
-    </form>
-    <div><h4 className="muted">Preview</h4><Preview form={f} /></div>
+  return (<div className="page">
+    <PageHeader icon={editing ? Pencil : Plus} title={editing ? `Edit ${editing.name}` : 'New template'} subtitle={editing ? `${editing.language} · ${editing.category}` : 'Submitted to Meta for review'}>
+      <Button icon={X} onClick={onCancel}>Cancel</Button></PageHeader>
+    <div className="grid-2-1">
+      <Card title="Template content" icon={FileText}>
+        <form className="form" onSubmit={save}>
+          {editing && <div className="alert info"><Lock size={16} /> Name and language can't be changed. Approved templates keep their category and allow 1 edit per 24h and 10 per 30 days. Edited templates go back to review.</div>}
+          <div className="form-3">
+            <Field label="Name" hint="lowercase_with_underscores"><input disabled={!!editing} value={f.name} onChange={(e) => set({ name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })} required /></Field>
+            <Field label="Language"><select disabled={!!editing} value={f.language} onChange={(e) => set({ language: e.target.value })}>{LANGS.map((l) => <option key={l}>{l}</option>)}</select></Field>
+            <Field label="Category"><select disabled={editing?.status === 'APPROVED'} value={f.category} onChange={(e) => set({ category: e.target.value })}><option>UTILITY</option><option>MARKETING</option><option>AUTHENTICATION</option></select></Field>
+          </div>
+          <div className="form-3">
+            <Field label="Header"><select value={f.header.format} onChange={(e) => setH({ format: e.target.value })}>{['NONE', 'TEXT', 'IMAGE', 'DOCUMENT', 'VIDEO'].map((x) => <option key={x}>{x}</option>)}</select></Field>
+            {f.header.format === 'TEXT' && <Field label="Header text" hint="Max 60, one {{1}}" className="span2"><input maxLength={60} value={f.header.text} onChange={(e) => setH({ text: e.target.value })} /></Field>}
+            {['IMAGE', 'DOCUMENT', 'VIDEO'].includes(f.header.format) && <Field label="Sample header_handle" hint="From Meta's Resumable Upload API" className="span2"><input value={f.header.example} onChange={(e) => setH({ example: e.target.value })} /></Field>}
+          </div>
+          {f.header.format === 'TEXT' && countVars(f.header.text) > 0 && <Field label="Header {{1}} example"><input value={f.header.example} onChange={(e) => setH({ example: e.target.value })} /></Field>}
+          <Field label={`Body (${f.body.text.length}/1024)`} hint="Use {{1}}, {{2}}… and *bold* _italic_ ~strike~"><textarea rows={6} maxLength={1024} value={f.body.text} onChange={(e) => set({ body: { ...f.body, text: e.target.value } })} required /></Field>
+          {n > 0 && <div className="form-3">{Array.from({ length: n }, (_, i) => <Field key={i} label={`Example {{${i + 1}}}`}><input value={f.body.examples[i] || ''}
+            onChange={(e) => { const ex = [...f.body.examples]; ex[i] = e.target.value; set({ body: { ...f.body, examples: ex } }) }} /></Field>)}</div>}
+          <Field label="Footer (optional, max 60)"><input maxLength={60} value={f.footer} onChange={(e) => set({ footer: e.target.value })} /></Field>
+          <div className="row between"><span className="field-label">Buttons ({f.buttons.length}/10)</span>
+            <Button size="sm" icon={Plus} disabled={f.buttons.length >= 10} onClick={() => set({ buttons: [...f.buttons, { type: 'QUICK_REPLY', text: '', url: '', phone_number: '', example: '' }] })}>Add button</Button></div>
+          {f.buttons.map((b, i) => <div className="btn-row" key={i}>
+            <select value={b.type} onChange={(e) => setBtn(i, { type: e.target.value })}><option>QUICK_REPLY</option><option>URL</option><option>PHONE_NUMBER</option></select>
+            <input maxLength={25} placeholder="Button text" value={b.text} onChange={(e) => setBtn(i, { text: e.target.value })} />
+            {b.type === 'URL' && <input className="grow" placeholder="https://… (optional {{1}} at end)" value={b.url} onChange={(e) => setBtn(i, { url: e.target.value })} />}
+            {b.type === 'URL' && countVars(b.url) > 0 && <input placeholder="Example full URL" value={b.example} onChange={(e) => setBtn(i, { example: e.target.value })} />}
+            {b.type === 'PHONE_NUMBER' && <input placeholder="+919876543210" value={b.phone_number} onChange={(e) => setBtn(i, { phone_number: e.target.value })} />}
+            <Button size="sm" variant="ghost-danger" icon={Trash2} onClick={() => set({ buttons: f.buttons.filter((_, j) => j !== i) })} /></div>)}
+          <div><Button type="submit" variant="primary" icon={Send} loading={busy}>{editing ? 'Submit edit to Meta' : 'Submit for review'}</Button></div>
+        </form>
+      </Card>
+      <div className="sticky"><Card title="Live preview" icon={Eye}><Preview form={f} /></Card></div>
+    </div>
   </div>)
 }
 
-export function Templates({ user }) {
-  const [rows, setRows] = useState([]); const [flt, setFlt] = useState({ status: '', category: '', language: '', q: '' })
-  const [mode, setMode] = useState(null) // null | {new} | {edit: t} | {view: t}
-  const [ok, setOk] = useState(''); const [err, setErr] = useState('')
-  const load = useCallback(() => { const qs = new URLSearchParams(Object.entries(flt).filter(([, v]) => v)).toString(); api(`/templates?${qs}`).then(setRows).catch((e) => setErr(e.message)) }, [flt])
+export function Templates() {
+  const [rows, setRows] = useState(null); const [flt, setFlt] = useState({ status: '', category: '', language: '', q: '' })
+  const [mode, setMode] = useState(null); const toast = useToast()
+  const load = useCallback(() => { const qs = new URLSearchParams(Object.entries(flt).filter(([, v]) => v)).toString(); return api(`/templates?${qs}`).then(setRows).catch((e) => toast.error(e.message)) }, [flt]) // eslint-disable-line
   useEffect(() => { load() }, [load])
-  useEffect(() => { const t = setInterval(load, 15000); return () => clearInterval(t) }, [load]) // picks up webhook status changes
-  const sync = async () => { setOk(''); setErr(''); try { const r = await api('/templates-sync', { method: 'POST' }); setOk(`Synced ${r.synced} template(s) from Meta${r.removed ? `, removed ${r.removed}` : ''}`); load() } catch (e) { setErr(e.message) } }
-  const del = async (t) => { if (!confirm(`Delete template ${t.name} (${t.language}) on Meta? The name can't be reused for 30 days.`)) return; try { await api(`/templates/${t.id}`, { method: 'DELETE' }); load() } catch (e) { setErr(e.message) } }
-  const edit = (t) => { setErr(''); if (!t.edit_check.allowed) { setErr(`Edit not allowed: ${t.edit_check.reason}`); return } setMode({ edit: t }) }
-  const view = async (t) => setMode({ view: await api(`/templates/${t.id}`) })
-  const langs = useMemo(() => [...new Set(rows.map((r) => r.language))], [rows])
+  useEffect(() => { const t = setInterval(load, 15000); return () => clearInterval(t) }, [load])
+  const sync = async () => { try { const r = await api('/templates-sync', { method: 'POST' }); toast.success(`Synced ${r.synced} template(s)${r.removed ? `, removed ${r.removed}` : ''}`); load() } catch (e) { toast.error(e.message) } }
+  const del = async (t) => { if (!confirm(`Delete template ${t.name} (${t.language}) on Meta? The name can't be reused for 30 days.`)) return; try { await api(`/templates/${t.id}`, { method: 'DELETE' }); toast.success('Template deleted'); if (mode?.view?.id === t.id) setMode(null); load() } catch (e) { toast.error(e.message) } }
+  const edit = (t) => { if (!t.edit_check.allowed) { toast.error(`Edit not allowed: ${t.edit_check.reason}`); return } setMode({ edit: t }) }
+  const view = async (t) => { try { setMode({ view: await api(`/templates/${t.id}`) }) } catch (e) { toast.error(e.message) } }
+  const all = rows || []
+  const langs = useMemo(() => [...new Set(all.map((r) => r.language))], [rows]) // eslint-disable-line
+  const counts = useMemo(() => all.reduce((a, t) => ({ ...a, [t.status]: (a[t.status] || 0) + 1 }), {}), [rows]) // eslint-disable-line
 
   if (mode?.new || mode?.edit) return <TemplateForm initial={mode.edit ? toForm(mode.edit) : blankForm()} editing={mode.edit}
-    onDone={() => { setMode(null); setOk(mode.edit ? 'Edit submitted; template is back in review.' : 'Template submitted to Meta for review.'); load() }} onCancel={() => setMode(null)} />
+    onDone={() => { toast.success(mode.edit ? 'Edit submitted; template is back in review' : 'Template submitted to Meta for review'); setMode(null); load() }} onCancel={() => setMode(null)} />
 
-  return (<div><h2>Template Master</h2>
-    <div className="row card">
-      <select value={flt.status} onChange={(e) => setFlt({ ...flt, status: e.target.value })}><option value="">All statuses</option>{STATUSES.map((s) => <option key={s}>{s}</option>)}</select>
-      <select value={flt.category} onChange={(e) => setFlt({ ...flt, category: e.target.value })}><option value="">All categories</option><option>UTILITY</option><option>MARKETING</option><option>AUTHENTICATION</option></select>
-      <select value={flt.language} onChange={(e) => setFlt({ ...flt, language: e.target.value })}><option value="">All languages</option>{langs.map((l) => <option key={l}>{l}</option>)}</select>
-      <input placeholder="Search name" value={flt.q} onChange={(e) => setFlt({ ...flt, q: e.target.value })} />
-      <button className="primary" onClick={() => setMode({ new: true })}>+ New template</button>
-      <button onClick={sync}>⟳ Sync from Meta</button>
-    </div>
-    {ok && <div className="ok">{ok}</div>}{err && <div className="err">{err}</div>}
-    <div className="split">
-      <table><thead><tr><th>Name</th><th>Lang</th><th>Category</th><th>Status</th><th>Quality</th><th>Vars</th><th /></tr></thead><tbody>
-        {rows.map((t) => <tr key={t.id} className={mode?.view?.id === t.id ? 'sel' : ''}>
-          <td><a href="#" onClick={(e) => { e.preventDefault(); view(t) }}>{t.name}</a>{t.rejected_reason && <div className="err small">Rejected: {t.rejected_reason}</div>}</td>
-          <td>{t.language}</td><td>{t.category}{t.previous_category && <small className="muted"> (was {t.previous_category})</small>}</td>
-          <td><Badge s={t.status} /></td><td>{t.quality_score && <span className={`q ${t.quality_score.toLowerCase()}`}>●</span>} {t.quality_score || '—'}</td>
-          <td>{t.body_variable_count}{t.header_format && t.header_format !== 'TEXT' ? ` + ${t.header_format.toLowerCase()}` : ''}{t.header_variable_count ? ' + hdr' : ''}</td>
-          <td className="actions"><button onClick={() => edit(t)} title={t.edit_check.reason || 'Edit'} className={t.edit_check.allowed ? '' : 'disabled'}>Edit</button>
-            <button className="danger" onClick={() => del(t)}>Delete</button></td></tr>)}
-        {!rows.length && <tr><td colSpan={7} className="muted">No templates. Click “Sync from Meta” or create one.</td></tr>}
-      </tbody></table>
-      {mode?.view && <div className="card side">
-        <div className="row between"><b>{mode.view.name}</b><button className="link" onClick={() => setMode(null)}>✕</button></div>
-        <div><Badge s={mode.view.status} /> {mode.view.category} · {mode.view.language} · quality {mode.view.quality_score || '—'}</div>
-        {mode.view.rejected_reason && <div className="err">Rejection reason: {mode.view.rejected_reason}</div>}
-        {!mode.view.edit_check.allowed && <div className="muted small">Editing: {mode.view.edit_check.reason}</div>}
+  return (<div className="page">
+    <PageHeader icon={FileText} title="Template Master" subtitle="Create, review and sync WhatsApp message templates">
+      <Button icon={RefreshCw} onClick={sync}>Sync from Meta</Button><Button variant="primary" icon={Plus} onClick={() => setMode({ new: true })}>New template</Button>
+    </PageHeader>
+    <div className="status-tabs">{['', ...STATUSES].map((s) => <button key={s || 'all'} className={flt.status === s ? 'on' : ''} onClick={() => setFlt({ ...flt, status: s })}>
+      {s ? s.replace('_', ' ').toLowerCase() : 'all'}<em>{s ? counts[s] || 0 : all.length}</em></button>)}</div>
+    <div className={mode?.view ? 'grid-2-1' : ''}>
+      <Card pad={false} title={<div className="filters">
+        <div className="input-ico"><Search size={16} className="ico" /><input placeholder="Search name" value={flt.q} onChange={(e) => setFlt({ ...flt, q: e.target.value })} /></div>
+        <select value={flt.category} onChange={(e) => setFlt({ ...flt, category: e.target.value })}><option value="">All categories</option><option>UTILITY</option><option>MARKETING</option><option>AUTHENTICATION</option></select>
+        <select value={flt.language} onChange={(e) => setFlt({ ...flt, language: e.target.value })}><option value="">All languages</option>{langs.map((l) => <option key={l}>{l}</option>)}</select></div>}>
+        <div className="table-wrap"><table className="table"><thead><tr><th>Template</th><th>Category</th><th>Status</th><th>Quality</th><th>Vars</th><th /></tr></thead>
+          {rows === null ? <TableSkeleton cols={6} /> : all.length ? <tbody>{all.map((t) => <tr key={t.id} className={`clickable ${mode?.view?.id === t.id ? 'sel' : ''}`} onClick={() => view(t)}>
+            <td><b>{t.name}</b><small className="block muted">{t.language}</small>{t.rejected_reason && <small className="block err-text">Rejected: {t.rejected_reason}</small>}</td>
+            <td>{t.category}{t.previous_category && <small className="block muted">was {t.previous_category}</small>}</td>
+            <td><Badge s={t.status} /></td><td>{t.quality_score ? <span className={`q ${t.quality_score.toLowerCase()}`}>● {t.quality_score}</span> : <span className="muted">—</span>}</td>
+            <td>{t.body_variable_count}{t.header_format && t.header_format !== 'TEXT' ? ` + ${t.header_format.toLowerCase()}` : ''}{t.header_variable_count ? ' + hdr' : ''}</td>
+            <td className="right nowrap" onClick={(e) => e.stopPropagation()}>
+              <Button size="sm" variant="ghost" icon={t.edit_check.allowed ? Pencil : Lock} title={t.edit_check.reason || 'Edit'} onClick={() => edit(t)} />
+              <Button size="sm" variant="ghost-danger" icon={Trash2} onClick={() => del(t)} /></td></tr>)}</tbody>
+            : <tbody><tr><td colSpan={6}><Empty icon={FileText} title="No templates">Click “Sync from Meta” or create a new one.</Empty></td></tr></tbody>}
+        </table></div>
+      </Card>
+      {mode?.view && <div className="sticky"><Card title={mode.view.name} icon={Eye} actions={<button className="icon-btn" onClick={() => setMode(null)}><X size={16} /></button>}>
+        <div className="row wrap gap8"><Badge s={mode.view.status} /><UiBadge tone="orange">{mode.view.category}</UiBadge><UiBadge>{mode.view.language}</UiBadge>{mode.view.quality_score && <UiBadge>quality {mode.view.quality_score}</UiBadge>}</div>
+        {mode.view.rejected_reason && <div className="alert error">Rejection reason: <b>{mode.view.rejected_reason}</b></div>}
+        {!mode.view.edit_check.allowed && <div className="alert info"><Lock size={14} /> {mode.view.edit_check.reason}</div>}
         <Preview form={toForm(mode.view)} />
-        <h4>Status history</h4>
-        {(mode.view.events || []).map((ev) => <div key={ev.id} className="small">{fmtTime(ev.created_at)} · {ev.field.replace('message_template_', '').replace(/_/g, ' ')}: <b>{ev.event}</b>{ev.reason ? ` — ${ev.reason}` : ''}</div>)}
-        {!mode.view.events?.length && <div className="muted small">No webhook events yet.</div>}
-      </div>}
+        <div className="row"><Button size="sm" icon={Pencil} onClick={() => edit(mode.view)} disabled={!mode.view.edit_check.allowed}>Edit</Button></div>
+        <h4 className="sub-h"><History size={14} /> Status history</h4>
+        <ul className="timeline">{(mode.view.events || []).map((ev) => <li key={ev.id}><b>{ev.event}</b> <span className="muted">{ev.field.replace('message_template_', '').replace(/_/g, ' ')}</span>{ev.reason && <div className="small">{ev.reason}</div>}<small className="muted">{fmtTime(ev.created_at)}</small></li>)}</ul>
+        {!mode.view.events?.length && <p className="muted small">No webhook events yet.</p>}
+      </Card></div>}
     </div>
   </div>)
 }
 
-/** Template sender used on the Send Message page. */
 export function TemplateSender({ numbers }) {
-  const [tpls, setTpls] = useState([]); const [from, setFrom] = useState(''); const [to, setTo] = useState('')
+  const [tpls, setTpls] = useState(null); const [from, setFrom] = useState(''); const [to, setTo] = useState('')
   const [tid, setTid] = useState(''); const [vals, setVals] = useState([]); const [hv, setHv] = useState(''); const [bv, setBv] = useState({})
-  const [ok, setOk] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false)
-  useEffect(() => { api('/templates?status=APPROVED').then(setTpls).catch(() => {}) }, [])
-  const t = tpls.find((x) => String(x.id) === String(tid))
+  const [busy, setBusy] = useState(false); const toast = useToast()
+  useEffect(() => { api('/templates?status=APPROVED').then(setTpls).catch(() => setTpls([])) }, [])
+  const t = (tpls || []).find((x) => String(x.id) === String(tid))
   const form = t ? toForm(t) : null
   const urlBtns = form ? form.buttons.map((b, i) => [b, i]).filter(([b]) => b.type === 'URL' && countVars(b.url) > 0) : []
   const send = async (e) => {
-    e.preventDefault(); setOk(''); setErr(''); setBusy(true)
-    try {
-      const m = await api('/messages/send-template', { method: 'POST', body: { phone_number_id: from, to, template_id: tid, params: vals.slice(0, t?.body_variable_count || 0), header_param: hv || null, button_params: bv } })
-      setOk(`Template sent (${m.wamid || m.status})`)
-    } catch (e) { setErr(e.message) } finally { setBusy(false) }
+    e.preventDefault(); setBusy(true)
+    try { const m = await api('/messages/send-template', { method: 'POST', body: { phone_number_id: from, to, template_id: tid, params: vals.slice(0, t?.body_variable_count || 0), header_param: hv || null, button_params: bv } }); toast.success(`Template sent${m.wamid ? '' : ` (${m.status})`}`) }
+    catch (e) { toast.error(e.message) } finally { setBusy(false) }
   }
-  return (<div className="tplform"><form className="card stack grow" onSubmit={send}>
-    <select value={from} onChange={(e) => setFrom(e.target.value)}><option value="">Select sender number…</option>{numbers.map((n) => <option key={n.id} value={n.id}>{n.name ? `${n.name} — ` : ''}{n.display_number}</option>)}</select>
-    <input placeholder="Recipient (e.g. 919876543210)" value={to} onChange={(e) => setTo(e.target.value)} />
-    <select value={tid} onChange={(e) => { setTid(e.target.value); setVals([]); setHv(''); setBv({}) }}><option value="">Select an APPROVED template…</option>
-      {tpls.map((x) => <option key={x.id} value={x.id}>{x.name} ({x.language}) · {x.category}</option>)}</select>
-    {!tpls.length && <small className="muted">No approved templates. Sync them in Template Master.</small>}
-    {t && (t.header_variable_count > 0 || ['IMAGE', 'DOCUMENT', 'VIDEO'].includes(t.header_format)) &&
-      <input placeholder={t.header_format === 'TEXT' ? 'Header {{1}}' : `Header ${t.header_format.toLowerCase()} URL (public https) or media id`} value={hv} onChange={(e) => setHv(e.target.value)} />}
-    {t && Array.from({ length: t.body_variable_count }, (_, i) => <input key={i} placeholder={`Body {{${i + 1}}}`} value={vals[i] || ''} onChange={(e) => { const v = [...vals]; v[i] = e.target.value; setVals(v) }} />)}
-    {urlBtns.map(([b, i]) => <input key={i} placeholder={`Button “${b.text}” URL suffix {{1}}`} value={bv[i] || ''} onChange={(e) => setBv({ ...bv, [i]: e.target.value })} />)}
-    <button className="primary" disabled={busy || !t}>{busy ? 'Sending…' : 'Send template'}</button>
-    {ok && <div className="ok">{ok}</div>}{err && <div className="err">{err}</div>}
-  </form>{form && <div><h4 className="muted">Preview</h4><Preview form={form} headerVal={hv || undefined} bodyVals={vals.length ? vals : undefined} buttonVals={bv} /></div>}</div>)
+  return (<div className="grid-2-1">
+    <Card title="Send template" icon={FileText}>
+      <form className="form" onSubmit={send}>
+        <div className="form-2">
+          <Field label="Sender number" icon={Phone}><select value={from} onChange={(e) => setFrom(e.target.value)} required><option value="">Select sender…</option>{numbers.map((n) => <option key={n.id} value={n.id}>{n.name ? `${n.name} — ` : ''}{n.display_number}</option>)}</select></Field>
+          <Field label="Recipient" icon={Hash}><input placeholder="919876543210" value={to} onChange={(e) => setTo(e.target.value)} required /></Field>
+        </div>
+        <Field label="Approved template" hint={tpls && !tpls.length ? 'No approved templates. Sync them in Template Master.' : null}>
+          <select value={tid} onChange={(e) => { setTid(e.target.value); setVals([]); setHv(''); setBv({}) }} required><option value="">{tpls === null ? 'Loading…' : 'Select template…'}</option>
+            {(tpls || []).map((x) => <option key={x.id} value={x.id}>{x.name} ({x.language}) · {x.category}</option>)}</select></Field>
+        {t && (t.header_variable_count > 0 || ['IMAGE', 'DOCUMENT', 'VIDEO'].includes(t.header_format)) &&
+          <Field label={t.header_format === 'TEXT' ? 'Header {{1}}' : `Header ${t.header_format.toLowerCase()} URL or media id`}><input value={hv} onChange={(e) => setHv(e.target.value)} required /></Field>}
+        {t && t.body_variable_count > 0 && <div className="form-2">{Array.from({ length: t.body_variable_count }, (_, i) => <Field key={i} label={`Body {{${i + 1}}}`}><input value={vals[i] || ''} onChange={(e) => { const v = [...vals]; v[i] = e.target.value; setVals(v) }} required /></Field>)}</div>}
+        {urlBtns.map(([b, i]) => <Field key={i} label={`Button “${b.text}” URL suffix`}><input value={bv[i] || ''} onChange={(e) => setBv({ ...bv, [i]: e.target.value })} required /></Field>)}
+        <div><Button type="submit" variant="primary" icon={Send} loading={busy} disabled={!t}>Send template</Button></div>
+      </form>
+    </Card>
+    <Card title="Preview" icon={Eye}>{form ? <Preview form={form} headerVal={hv || undefined} bodyVals={vals.length ? vals : undefined} buttonVals={bv} /> : <Empty icon={FileText} title="Pick a template">Its preview appears here.</Empty>}</Card>
+  </div>)
 }
