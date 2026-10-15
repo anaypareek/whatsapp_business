@@ -148,3 +148,23 @@ BODY='{"object":"whatsapp_business_account","entry":[{"id":"WABA","changes":[{"f
 SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "<app_secret>" | awk '{print $NF}')
 curl -H 'Content-Type: application/json' -H "X-Hub-Signature-256: sha256=$SIG" -d "$BODY" $B/webhook/whatsapp
 ```
+
+## Automation flows
+Admin uses `$B/...` with a staff token. The client portal uses `$B/client/...` with a client token and only sees its own numbers.
+```bash
+curl -H "Authorization: Bearer $T" -H 'Accept: application/json' "$B/flow-numbers"                 # numbers you can build flows for
+curl -H "Authorization: Bearer $T" -H 'Accept: application/json' "$B/flows?phone_number_id=1"      # list + triggered/completed/active_sessions
+curl -H "Authorization: Bearer $T" -H 'Accept: application/json' -H 'Content-Type: application/json' -X POST $B/flows -d '{
+  "phone_number_id":1,"name":"Menu","trigger_type":"contains","keywords":["hi","menu"],"is_active":true,
+  "nodes":[{"id":"trigger","type":"trigger","position":{"x":0,"y":0}},
+           {"id":"q1","type":"question","position":{"x":300,"y":0},"data":{"text":"How can we help?","options":[{"id":"o1","title":"Track order"},{"id":"o2","title":"Prices"}]}},
+           {"id":"m1","type":"message","position":{"x":600,"y":0},"data":{"text":"Send your order number","media_type":"none"}}],
+  "edges":[{"source":"trigger","sourceHandle":"next","target":"q1"},{"source":"q1","sourceHandle":"opt-o1","target":"m1"}]}'
+curl ... -X PUT $B/flows/1 -d '{"is_active":false}'      # activate / deactivate (or send the whole graph)
+curl ... -X POST $B/flows/1/duplicate                    # copy (inactive)
+curl ... $B/flows/1/stats                                # triggered, completed, active_sessions, recent_sessions
+curl ... -X POST $B/flows-simulate -d '{"flow":{"trigger_type":"contains","keywords":["hi"],"nodes":[...],"edges":[...]},"waiting":null,"text":"hi"}'
+# -> {"event":"start","outputs":[{"kind":"question","interactive":{...}}],"waiting":"q1","completed":false}; send "waiting" back with the next text or interactive_id
+```
+Node types: `message` {text, media_type none|image|document, media_url, filename}; `question` {text, options[{id,title,keywords}], footer, list_button, retry_text};
+`condition` {keywords[], match_type contains|exact|starts_with}; `webhook` {url}. Edge handles: `next`, `opt-<optionId>`, `match`, `nomatch`. At most 10 steps.

@@ -59,3 +59,11 @@ Media IDs are valid ~30 days. Download inbound media: `GET /{media-id}` → shor
   {"type":"header","parameters":[{"type":"text","text":"…"}|{"type":"image","image":{"link":"https://…"}}]},
   {"type":"body","parameters":[{"type":"text","text":"…"},…]},
   {"type":"button","sub_type":"url","index":"0","parameters":[{"type":"text","text":"suffix"}]}]}}`. Templates can be sent outside the 24h window.
+
+## Interactive messages (used by Automation Flows)
+`POST /{phone-number-id}/messages` with `type: "interactive"`:
+- Reply buttons: `{"type":"button","body":{"text":"..."},"action":{"buttons":[{"type":"reply","reply":{"id":"f1.q1.o1","title":"Track order"}}]}}`. Allows 1–3 buttons, title ≤20 chars, id ≤256.
+- List: `{"type":"list","body":{"text":"..."},"action":{"button":"Choose an option","sections":[{"title":"Options","rows":[{"id":"f1.q2.r1","title":"Bathing soap"}]}]}}`. Allows ≤10 rows total, row title ≤24, button ≤20.
+- Optional `footer: {text}` ≤60. Body ≤1024.
+- Inbound replies arrive as `messages[].type = "interactive"` with `interactive.button_reply {id,title}` or `interactive.list_reply {id,title,description}`.
+Interactive messages are free-form, so they only reach users inside the 24h customer service window. A flow always starts from the contact's own message, so this is satisfied.

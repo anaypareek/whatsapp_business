@@ -24,6 +24,15 @@ if (preg_match('#/message_templates$#', $path)) {
 if (preg_match('#/(MOCKTPL\d+)$#', $path, $mm) && $_SERVER['REQUEST_METHOD'] === 'POST') {
     foreach ($tpls as &$t) if ($t['id'] === $mm[1]) { $t = array_merge($t, $in, ['status' => 'PENDING']); } unset($t); $save(); echo json_encode(['success' => true]); return;
 }
+if (preg_match('#/messages$#', $path) && ($in['type'] ?? '') === 'interactive') {
+    // mirror Meta's interactive limits: <=3 reply buttons (title <=20), list <=10 rows (title <=24), body <=1024
+    $i = $in['interactive'] ?? []; $bad = null;
+    if (mb_strlen($i['body']['text'] ?? '') > 1024 || ($i['body']['text'] ?? '') === '') $bad = 'body.text must be 1-1024 chars';
+    if (($i['type'] ?? '') === 'button') { $b = $i['action']['buttons'] ?? []; if (! $b || count($b) > 3) $bad = 'buttons must be 1-3'; foreach ($b as $x) if (mb_strlen($x['reply']['title'] ?? '') > 20) $bad = 'button title > 20'; }
+    elseif (($i['type'] ?? '') === 'list') { $rows = array_merge(...array_map(fn ($s) => $s['rows'] ?? [], $i['action']['sections'] ?? [[]])); if (! $rows || count($rows) > 10) $bad = 'list rows must be 1-10'; foreach ($rows as $x) if (mb_strlen($x['title'] ?? '') > 24) $bad = 'row title > 24'; if (mb_strlen($i['action']['button'] ?? '') > 20) $bad = 'list button > 20'; }
+    else $bad = 'unsupported interactive type';
+    if ($bad) { http_response_code(400); echo json_encode(['error' => ['message' => "(#131009) Parameter value is not valid: $bad", 'code' => 131009]]); return; }
+}
 if (preg_match('#/messages$#', $path)) { $b = json_decode(file_get_contents('php://input'), true) ?: []; echo json_encode(['messaging_product' => 'whatsapp', 'contacts' => [['input' => $b['to'] ?? '', 'wa_id' => $b['to'] ?? '']], 'messages' => [['id' => 'wamid.MOCK'.bin2hex(random_bytes(6))]]]); }
 elseif (preg_match('#/media$#', $path)) echo json_encode(['id' => 'MOCKMEDIA'.rand(1000, 9999)]);
 elseif (preg_match('#/phone_numbers$#', $path)) echo json_encode(['data' => [['id' => '100000000000001', 'display_phone_number' => '+91 98765 43210', 'verified_name' => 'Oswal Soap', 'quality_rating' => 'GREEN', 'status' => 'CONNECTED']]]);

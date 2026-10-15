@@ -48,6 +48,23 @@ class MessagingService
         return $msg;
     }
 
+    public function sendInteractive(PhoneNumber $from, string $to, array $interactive, ?string $text, string $source = 'flow'): Message
+    {
+        $to = preg_replace('/\D/', '', $to);
+        $opts = collect($interactive['action']['buttons'] ?? [])->pluck('reply.title')
+            ->merge(collect($interactive['action']['sections'] ?? [])->flatMap(fn ($sec) => collect($sec['rows'] ?? [])->pluck('title')));
+        $msg = Message::create(['phone_number_id' => $from->id, 'contact_wa_id' => $to, 'direction' => 'out', 'type' => 'interactive',
+            'body' => trim($text."\n".$opts->map(fn ($t, $i) => ($i + 1).'. '.$t)->implode("\n")), 'status' => 'pending', 'source' => $source]);
+        try {
+            $res = $this->wa->sendInteractive($from->phone_number_id, $to, $interactive);
+            $msg->fill(['wamid' => $res['messages'][0]['id'] ?? null, 'status' => 'sent', 'raw' => $res]);
+        } catch (Throwable $e) {
+            $msg->fill(['status' => 'failed', 'error' => $e->getMessage()]);
+        }
+        $msg->save();
+        return $msg;
+    }
+
     public function send(PhoneNumber $from, string $to, ?string $text, ?UploadedFile $file = null, ?string $mediaUrl = null, string $source = 'manual'): Message
     {
         $to = preg_replace('/\D/', '', $to);

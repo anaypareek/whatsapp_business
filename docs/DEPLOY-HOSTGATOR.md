@@ -189,5 +189,5 @@ composer install --no-dev --optimize-autoloader
 php artisan migrate --force
 php artisan config:clear && php artisan route:clear && php artisan view:clear
 php artisan config:cache && php artisan route:cache && php artisan view:cache
-cd .. && cp deploy/hostgator-root.htaccess .htaccess   # adds the /number-requests, /template-requests, /template-stats/{id} client routes
+cd .. && cp deploy/hostgator-root.htaccess .htaccess   # client routes: /number-requests, /template-requests, /template-stats/{id}, /flows
 ```

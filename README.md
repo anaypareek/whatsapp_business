@@ -39,7 +39,7 @@ Fresh setup: `composer install && cp .env.example .env && php artisan key:genera
 
 ## Tests
 ```bash
-cd api && php artisan test          # 34 feature tests, Http::fake for Meta, MySQL db whatsapp_business_test
+cd api && php artisan test          # 45 feature tests, Http::fake for Meta, MySQL db whatsapp_business_test
 tools/e2e-curl.sh                   # curl smoke test against the running servers
 ```
 
@@ -100,3 +100,24 @@ admin `GET /api/number-requests`, `POST /api/number-requests/{id}/approve|reject
 
 ## Frontend build is committed
 `web/dist` is in git because the server has no Node. After changing anything in `web/src`, run `cd web && npm run build` and commit `web/dist` with your change.
+
+## Automation Flows (Wati-style flow builder)
+Admin → **Automation Flows** (every number; pick a client's number first) and client portal → **Automation flows** (only the client's own numbers).
+1. Pick a phone number, then create flows for it. A flow belongs to that number and to the number's client.
+2. **Trigger**: keywords (contains as a whole word or phrase, is exactly, or starts with), several keywords, case-insensitive.
+3. **Steps** (max **10** per flow, enforced in the UI and the API), on a React Flow canvas (`@xyflow/react`) with drag, connect, zoom and a minimap:
+   - **Send a message** (green): text, optional image or document by URL.
+   - **Ask a question** (yellow): up to 3 options are sent as interactive **reply buttons** (title ≤20), and 4–10 as a **list message** (title ≤24). Each option has its own branch.
+   - **Set a condition** (blue): keyword match on the contact's latest reply, with *Matched* and *No match* branches.
+   - **Webhook** (pink): POSTs `{event, flow_id, session_id, phone_number, contact, last_input, at}` to an http(s) URL. Private and loopback addresses are blocked. The flow then continues.
+4. **Runtime** (`app/Services/FlowEngine.php` with the pure interpreter `FlowRunner.php`): each inbound webhook message is checked against the number's active flows.
+   A per-contact session in `flow_sessions` (MySQL) stores the question it is waiting on and expires after **24h** without a reply.
+   Button and list replies are matched by id (`f{flow}.{node}.{option}`). Typed text is matched by option number, title, the option's extra keywords, or a distinctive word of one title.
+   An unrecognised reply re-asks the question, and a trigger keyword restarts the flow. **Flows take priority over the simple auto-replies**, which still run when no flow handles the message.
+5. **Test flow** simulator: a WhatsApp phone preview that runs the *unsaved* draft through the same interpreter (`POST /api/flows-simulate`). Nothing is sent.
+6. Save, activate/deactivate (activation needs keywords and a connected trigger), duplicate (the copy starts inactive) and delete.
+   Analytics per flow: triggered, completed and live sessions.
+
+API (admin `/api/...`, client `/api/client/...`, same shape): `GET flow-numbers`, `GET|POST flows`, `GET|PUT|DELETE flows/{id}`, `POST flows/{id}/duplicate`,
+`GET flows/{id}/stats`, `POST flows-simulate`. Client requests for another client's flow return 404, and the admin API returns 403 for client tokens.
+`tools/mock-meta.php` validates interactive payloads the way Meta does (1–3 buttons with titles ≤20, list of 1–10 rows with titles ≤24, list button text ≤20, body ≤1024).

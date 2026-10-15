@@ -11,11 +11,11 @@ use Illuminate\Support\Carbon;
 
 class WebhookProcessor
 {
-    public function __construct(protected MessagingService $messaging) {}
+    public function __construct(protected MessagingService $messaging, protected FlowEngine $flows) {}
 
     public function handle(array $payload): array
     {
-        $stats = ['messages' => 0, 'statuses' => 0, 'auto_replies' => 0, 'template_events' => 0];
+        $stats = ['messages' => 0, 'statuses' => 0, 'auto_replies' => 0, 'flows' => 0, 'template_events' => 0];
         foreach ($payload['entry'] ?? [] as $entry) {
             foreach ($entry['changes'] ?? [] as $change) {
                 $field = $change['field'] ?? null;
@@ -55,7 +55,9 @@ class WebhookProcessor
                         'created_at' => isset($m['timestamp']) ? Carbon::createFromTimestamp((int) $m['timestamp']) : now(),
                     ]);
                     $stats['messages']++;
-                    if ($phone && $body && $this->autoReply($phone, $msg)) $stats['auto_replies']++;
+                    // automation flows take priority over simple auto-replies
+                    if ($phone && $this->flows->handle($phone, $msg)) $stats['flows']++;
+                    elseif ($phone && $body && $this->autoReply($phone, $msg)) $stats['auto_replies']++;
                 }
                 foreach ($v['statuses'] ?? [] as $s) {
                     $orig = Message::where('wamid', $s['id'])->first();

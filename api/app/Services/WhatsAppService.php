@@ -42,6 +42,12 @@ class WhatsAppService
         return $this->send($phoneNumberId, $to, $type, $media);
     }
 
+    /** Interactive reply buttons / list message. $interactive is Meta's "interactive" object. */
+    public function sendInteractive(string $phoneNumberId, string $to, array $interactive): array
+    {
+        return $this->send($phoneNumberId, $to, 'interactive', $interactive);
+    }
+
     protected function send(string $phoneNumberId, string $to, string $type, array $payload): array
     {
         return $this->check($this->client()->post($this->baseUrl()."/{$phoneNumberId}/messages", [

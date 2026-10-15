@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { LayoutDashboard, MessagesSquare, Send, FileText, Phone, Bot, Users as UsersIcon, KeyRound, Settings as SettingsIcon, LogOut, Menu, ChevronDown, Bell, MessageCircle, Briefcase, PhoneCall, ClipboardList } from 'lucide-react'
+import { LayoutDashboard, MessagesSquare, Send, FileText, Phone, Bot, Users as UsersIcon, KeyRound, Settings as SettingsIcon, LogOut, Menu, ChevronDown, Bell, MessageCircle, Briefcase, PhoneCall, ClipboardList, Workflow } from 'lucide-react'
 import { api, getToken, setToken } from './api'
 import { Spinner } from './ui'
 import { ADMIN_BASE } from './config'
@@ -8,15 +8,16 @@ import Dashboard from './Dashboard'
 import { Templates } from './templates'
 import { Clients } from './clients'
 import { NumberRequests, TemplateRequests } from './requests'
+import { Flows } from './flows'
 import { Users, Numbers, SendMessage, Chat, AutoReplies, Settings, ApiKeys } from './pages'
 
 const NAV = [
   { group: 'Overview', items: [['dashboard', 'Dashboard', LayoutDashboard]] },
-  { group: 'Messaging', items: [['chat', 'Chat Master', MessagesSquare], ['send', 'Send Message', Send], ['templates', 'Template Master', FileText], ['rules', 'Auto-replies', Bot]] },
+  { group: 'Messaging', items: [['chat', 'Chat Master', MessagesSquare], ['send', 'Send Message', Send], ['templates', 'Template Master', FileText], ['flows', 'Automation Flows', Workflow], ['rules', 'Auto-replies', Bot]] },
   { group: 'Requests', items: [['number-requests', 'Number Requests', PhoneCall, true], ['template-requests', 'Template Requests', ClipboardList, true]] },
   { group: 'Setup', items: [['clients', 'Clients', Briefcase, true], ['numbers', 'Number Master', Phone], ['users', 'Users', UsersIcon, true], ['keys', 'API Keys', KeyRound, true], ['settings', 'Settings', SettingsIcon, true]] },
 ]
-const PAGES = { 'number-requests': NumberRequests, 'template-requests': TemplateRequests, clients: Clients, dashboard: Dashboard, chat: Chat, send: SendMessage, templates: Templates, numbers: Numbers, rules: AutoReplies, users: Users, keys: ApiKeys, settings: Settings }
+const PAGES = { flows: () => <Flows scope="admin" />, 'number-requests': NumberRequests, 'template-requests': TemplateRequests, clients: Clients, dashboard: Dashboard, chat: Chat, send: SendMessage, templates: Templates, numbers: Numbers, rules: AutoReplies, users: Users, keys: ApiKeys, settings: Settings }
 const TITLES = Object.fromEntries(NAV.flatMap((g) => g.items.map(([k, l]) => [k, l])))
 
 export default function App() {
