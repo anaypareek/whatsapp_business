@@ -25,6 +25,12 @@ Route::middleware(['auth:sanctum', EnsureClient::class])->prefix('client')->grou
     Route::get('/messages/thread', [Api\ClientPortalController::class, 'thread']);
     Route::get('/messages/poll', [Api\ClientPortalController::class, 'poll']);
     Route::post('/messages/send', [Api\ClientPortalController::class, 'send']);
+    Route::get('/number-requests', [Api\ClientPortalController::class, 'numberRequests']);
+    Route::post('/number-requests', [Api\ClientPortalController::class, 'storeNumberRequest'])->middleware('throttle:20,1');
+    Route::get('/template-requests', [Api\ClientPortalController::class, 'templateRequests']);
+    Route::post('/template-requests', [Api\ClientPortalController::class, 'storeTemplateRequest'])->middleware('throttle:20,1');
+    Route::get('/stats', [Api\ClientPortalController::class, 'stats']);
+    Route::get('/stats/templates/{template}', [Api\ClientPortalController::class, 'templateSends'])->whereNumber('template');
 });
 
 // ---- Staff / admin portal (tokens must belong to a User) ----
@@ -52,6 +58,17 @@ Route::middleware(['auth:sanctum', EnsureStaff::class])->group(function () {
 
     Route::middleware(EnsureAdmin::class)->group(function () {
         Route::apiResource('clients', Api\ClientController::class);
+        Route::get('/requests/pending-counts', fn () => ['numbers' => \App\Models\PhoneNumberRequest::where('status', 'pending')->count(),
+            'templates' => \App\Models\TemplateRequest::where('status', 'pending')->count()]);
+        Route::get('/number-requests', [Api\NumberRequestController::class, 'index']);
+        Route::post('/number-requests/{numberRequest}/approve', [Api\NumberRequestController::class, 'approve']);
+        Route::post('/number-requests/{numberRequest}/reject', [Api\NumberRequestController::class, 'reject']);
+        Route::post('/number-requests/{numberRequest}/register', [Api\NumberRequestController::class, 'retryRegistration']);
+        Route::get('/template-requests', [Api\TemplateRequestController::class, 'index']);
+        Route::get('/template-requests/{templateRequest}', [Api\TemplateRequestController::class, 'show']);
+        Route::put('/template-requests/{templateRequest}', [Api\TemplateRequestController::class, 'update']);
+        Route::post('/template-requests/{templateRequest}/approve', [Api\TemplateRequestController::class, 'approve']);
+        Route::post('/template-requests/{templateRequest}/reject', [Api\TemplateRequestController::class, 'reject']);
         Route::post('/clients/{client}/reset-password', [Api\ClientController::class, 'resetPassword']);
         Route::apiResource('users', Api\UserController::class)->only(['index', 'store', 'destroy']);
         Route::get('/settings', [Api\SettingsController::class, 'show']);

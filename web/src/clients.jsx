@@ -67,7 +67,7 @@ export function Clients() {
 
   return (<div className="page">
     <PageHeader icon={Briefcase} title="Clients" subtitle="Client accounts for the client portal, with their numbers and templates" />
-    <div className="grid-form">
+    <div className="grid-form clients-grid">
       <div className="stack-cards">
         <Card title="Add client" icon={UserPlus}>
           <form className="form" onSubmit={add}>
@@ -84,17 +84,17 @@ export function Clients() {
       <Card pad={false} title={<div className="filters">
         <div className="input-ico"><Search size={16} className="ico" /><input placeholder="Search name, company or email" value={flt.q} onChange={(e) => setFlt({ ...flt, q: e.target.value })} /></div>
         <select value={flt.status} onChange={(e) => setFlt({ ...flt, status: e.target.value })}><option value="">All statuses</option><option value="active">Active</option><option value="inactive">Inactive</option></select></div>}>
-        <div className="table-wrap"><table className="table"><thead><tr><th>Client</th><th>Numbers</th><th>Templates</th><th>Status</th><th>Last login</th><th /></tr></thead>
+        <div className="table-wrap"><table className="table clients-table"><thead><tr><th>Client</th><th>Numbers</th><th>Templates</th><th>Status</th><th className="col-login">Last login</th><th /></tr></thead>
           {loading ? <TableSkeleton cols={6} /> : rows.length ? <tbody>{rows.map((c) => <tr key={c.id} className={c.is_active ? '' : 'dim'}>
             <td><div className="cell-user"><Avatar name={c.name} size={36} /><div><b>{c.name}</b><small>{c.company ? `${c.company} · ` : ''}{c.email}</small></div></div></td>
             <td>{c.phone_numbers_count ? <div className="num-chips">{c.phone_numbers.map((n) => <span key={n.id} className="num-chip" title={n.phone_number_id}><Phone size={11} />{n.display_number}</span>)}</div> : <span className="muted">—</span>}</td>
             <td><span className="count-pill"><FileText size={13} />{c.templates_count}</span></td>
-            <td><Badge tone={c.is_active ? 'green' : 'gray'}>{c.is_active ? 'Active' : 'Inactive'}</Badge></td>
-            <td className="muted nowrap">{c.last_login_at ? fmtTime(c.last_login_at) : 'Never'}</td>
-            <td className="right nowrap">
+            <td><Badge tone={c.is_active ? 'green' : 'gray'}>{c.is_active ? 'Active' : 'Inactive'}</Badge><small className="block muted login-under">{c.last_login_at ? fmtTime(c.last_login_at) : 'Never logged in'}</small></td>
+            <td className="muted nowrap col-login">{c.last_login_at ? fmtTime(c.last_login_at) : 'Never'}</td>
+            <td className="right actions">
               <Button size="sm" variant="ghost" icon={Pencil} title="Edit" onClick={() => setEdit({ ...c })} />
               <Button size="sm" variant="ghost" icon={KeyRound} title="Reset password" onClick={() => { setReset(c); setResetPw('') }} />
-              <Button size="sm" variant={c.is_active ? 'ghost-danger' : 'ghost'} icon={Power} onClick={() => toggle(c)}>{c.is_active ? 'Deactivate' : 'Activate'}</Button></td></tr>)}</tbody>
+              <Button size="sm" variant={c.is_active ? 'ghost-danger' : 'ghost'} icon={Power} title={c.is_active ? 'Deactivate' : 'Activate'} aria-label={c.is_active ? 'Deactivate' : 'Activate'} onClick={() => toggle(c)}><span className="act-label">{c.is_active ? 'Deactivate' : 'Activate'}</span></Button></td></tr>)}</tbody>
             : <tbody><tr><td colSpan={6}><Empty icon={Briefcase} title="No clients yet">Create a client, then assign numbers to them in Number Master.</Empty></td></tr></tbody>}
         </table></div>
       </Card>

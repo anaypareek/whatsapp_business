@@ -63,6 +63,7 @@ class DashboardController extends Controller
             'contacts' => Message::distinct('contact_wa_id')->count('contact_wa_id'),
             'api_keys' => ApiKey::count(),
             'series' => $series,
+            'pending_requests' => ['numbers' => \App\Models\PhoneNumberRequest::where('status', 'pending')->count(), 'templates' => \App\Models\TemplateRequest::where('status', 'pending')->count()],
             'recent_conversations' => $recent,
         ];
     }

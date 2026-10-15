@@ -34,7 +34,7 @@ class MessagingService
         $hf = $t->header_format;
         $msg = Message::create([
             'phone_number_id' => $from->id, 'contact_wa_id' => $to, 'direction' => 'out', 'type' => 'template',
-            'body' => TemplateBuilder::render($t, $bodyParams, $headerParam), 'template_name' => $t->name.' ('.$t->language.')',
+            'body' => TemplateBuilder::render($t, $bodyParams, $headerParam), 'template_name' => $t->name.' ('.$t->language.')', 'message_template_id' => $t->id,
             'media_url' => in_array($hf, ['IMAGE', 'DOCUMENT', 'VIDEO']) && preg_match('#^https?://#', (string) $headerParam) ? $headerParam : null,
             'status' => 'pending', 'source' => $source,
         ]);

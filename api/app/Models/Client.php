@@ -16,4 +16,6 @@ class Client extends Authenticatable
     }
     public function phoneNumbers() { return $this->hasMany(PhoneNumber::class); }
     public function templates() { return $this->hasMany(MessageTemplate::class); }
+    public function numberRequests() { return $this->hasMany(PhoneNumberRequest::class); }
+    public function templateRequests() { return $this->hasMany(TemplateRequest::class); }
 }

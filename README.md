@@ -39,7 +39,7 @@ Fresh setup: `composer install && cp .env.example .env && php artisan key:genera
 
 ## Tests
 ```bash
-cd api && php artisan test          # 19 feature tests, Http::fake for Meta, MySQL db whatsapp_business_test
+cd api && php artisan test          # 34 feature tests, Http::fake for Meta, MySQL db whatsapp_business_test
 tools/e2e-curl.sh                   # curl smoke test against the running servers
 ```
 
@@ -80,3 +80,23 @@ The admin panel is served at **`/wab-control-7x`** (login: `/wab-control-7x/logi
 
 `/` is the **client portal** (`web/index.html`, its own Vite entry, so its bundle has no admin path and no link to it). Clients log in at `/login` and see only the numbers assigned to them: dashboard, chats and sending, numbers, and templates. The admin panel is a separate entry (`web/admin.html`). `/admin` and every other unknown path return
 `web/site/404.html` with HTTP 404. `/api/*`, `/storage/*` and `/up` still go to Laravel.
+
+## Client requests and stats
+- **Number requests**: clients use *Number requests* in the portal (phone number, display name, business name, category, notes) and see each request's status and any rejection reason.
+  Admin → **Number Requests** (`/wab-control-7x/number-requests`) approves with the Meta *Phone number ID* and the 6-digit PIN, or rejects with a reason.
+  Approving creates the number assigned to that client and calls `WhatsAppService::registerNumber`. The outcome (`registered`/`failed`) and any error are stored on
+  the request. A failed registration can be retried from the same page.
+- **Template requests**: clients use *Template requests → Request new template*, which opens the same builder and live preview as Template Master. Admin → **Template Requests**
+  lets you view, edit, approve (calls Meta `POST /{waba}/message_templates`, creates the template linked to the client) or reject with a reason. Meta's PENDING/APPROVED/REJECTED
+  status then arrives through the existing webhook and *Sync from Meta*. Clients only see **APPROVED** templates assigned to them under *My templates*.
+- **Client dashboard**: total sent, phone numbers, sent today and this month, a 7-day chart, and per-template sent/delivered/read/failed/last sent. Click a template
+  for `/template-stats/{id}`, which lists every send (recipient, sender number, time, status and error), paginated and searchable. Everything is scoped to the client's own numbers.
+  Template sends store `messages.message_template_id` (migration backfills older rows from `template_name`).
+- Admin sidebar and dashboard show pending counts for both request types.
+
+API: client `GET|POST /api/client/number-requests`, `GET|POST /api/client/template-requests`, `GET /api/client/stats`, `GET /api/client/stats/templates/{id}?q=&status=&page=&per_page=`;
+admin `GET /api/number-requests`, `POST /api/number-requests/{id}/approve|reject|register`, `GET /api/template-requests`, `GET|PUT /api/template-requests/{id}`,
+`POST /api/template-requests/{id}/approve|reject`, `GET /api/requests/pending-counts`.
+
+## Frontend build is committed
+`web/dist` is in git because the server has no Node. After changing anything in `web/src`, run `cd web && npm run build` and commit `web/dist` with your change.

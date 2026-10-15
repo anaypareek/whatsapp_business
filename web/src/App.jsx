@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { LayoutDashboard, MessagesSquare, Send, FileText, Phone, Bot, Users as UsersIcon, KeyRound, Settings as SettingsIcon, LogOut, Menu, ChevronDown, Bell, MessageCircle, Briefcase } from 'lucide-react'
+import { LayoutDashboard, MessagesSquare, Send, FileText, Phone, Bot, Users as UsersIcon, KeyRound, Settings as SettingsIcon, LogOut, Menu, ChevronDown, Bell, MessageCircle, Briefcase, PhoneCall, ClipboardList } from 'lucide-react'
 import { api, getToken, setToken } from './api'
 import { Spinner } from './ui'
 import { ADMIN_BASE } from './config'
@@ -7,14 +7,16 @@ import Login from './Login'
 import Dashboard from './Dashboard'
 import { Templates } from './templates'
 import { Clients } from './clients'
+import { NumberRequests, TemplateRequests } from './requests'
 import { Users, Numbers, SendMessage, Chat, AutoReplies, Settings, ApiKeys } from './pages'
 
 const NAV = [
   { group: 'Overview', items: [['dashboard', 'Dashboard', LayoutDashboard]] },
   { group: 'Messaging', items: [['chat', 'Chat Master', MessagesSquare], ['send', 'Send Message', Send], ['templates', 'Template Master', FileText], ['rules', 'Auto-replies', Bot]] },
+  { group: 'Requests', items: [['number-requests', 'Number Requests', PhoneCall, true], ['template-requests', 'Template Requests', ClipboardList, true]] },
   { group: 'Setup', items: [['clients', 'Clients', Briefcase, true], ['numbers', 'Number Master', Phone], ['users', 'Users', UsersIcon, true], ['keys', 'API Keys', KeyRound, true], ['settings', 'Settings', SettingsIcon, true]] },
 ]
-const PAGES = { clients: Clients, dashboard: Dashboard, chat: Chat, send: SendMessage, templates: Templates, numbers: Numbers, rules: AutoReplies, users: Users, keys: ApiKeys, settings: Settings }
+const PAGES = { 'number-requests': NumberRequests, 'template-requests': TemplateRequests, clients: Clients, dashboard: Dashboard, chat: Chat, send: SendMessage, templates: Templates, numbers: Numbers, rules: AutoReplies, users: Users, keys: ApiKeys, settings: Settings }
 const TITLES = Object.fromEntries(NAV.flatMap((g) => g.items.map(([k, l]) => [k, l])))
 
 export default function App() {
@@ -25,6 +27,8 @@ export default function App() {
   const [navOpen, setNavOpen] = useState(false)
   const [menu, setMenu] = useState(false)
   const [unread, setUnread] = useState(0)
+  const [pending, setPending] = useState({ numbers: 0, templates: 0 })
+  const loadPending = () => user?.is_admin && api('/requests/pending-counts').then(setPending).catch(() => {})
   const menuRef = useRef()
 
   useEffect(() => { if (getToken()) api('/auth/me').then(setUser).catch(() => setToken(null)).finally(() => setBooting(false)) }, [])
@@ -42,6 +46,7 @@ export default function App() {
     const f = () => api('/messages/poll').then((p) => setUnread(p.unread)).catch(() => {})
     f(); const t = setInterval(f, 10000); return () => clearInterval(t)
   }, [user])
+  useEffect(() => { if (!user?.is_admin) return; loadPending(); const t = setInterval(loadPending, 30000); return () => clearInterval(t) }, [user]) // eslint-disable-line
 
   if (booting) return <div className="boot"><Spinner size={28} /></div>
   if (!user) return <Login onLogin={(u) => { setUser(u); history.replaceState(null, '', `${ADMIN_BASE}/dashboard`); setTab('dashboard') }} />
@@ -56,7 +61,9 @@ export default function App() {
         <nav>{NAV.map((g) => (<div key={g.group} className="nav-group"><div className="nav-label">{g.group}</div>
           {g.items.filter(([, , , admin]) => !admin || user.is_admin).map(([k, label, Icon]) => (
             <button key={k} className={`nav-item ${tab === k ? 'active' : ''}`} onClick={() => go(k)}><Icon size={18} /><span>{label}</span>
-              {k === 'chat' && unread > 0 && <em className="nav-badge">{unread}</em>}</button>))}
+              {k === 'chat' && unread > 0 && <em className="nav-badge">{unread}</em>}
+              {k === 'number-requests' && pending.numbers > 0 && <em className="nav-badge" title="Pending">{pending.numbers}</em>}
+              {k === 'template-requests' && pending.templates > 0 && <em className="nav-badge" title="Pending">{pending.templates}</em>}</button>))}
         </div>))}</nav>
         <div className="sidebar-foot"><div className="help-card"><b>Need the API?</b><small>Use API Keys to send order alerts from your store.</small>
           {user.is_admin && <button onClick={() => go('keys')}>Manage keys</button>}</div></div>
@@ -81,7 +88,7 @@ export default function App() {
             </div>
           </div>
         </header>
-        <main className={`main ${tab === 'chat' ? 'main-chat' : ''}`}><Page user={user} go={go} /></main>
+        <main className={`main ${tab === 'chat' ? 'main-chat' : ''}`}><Page user={user} go={go} onChange={loadPending} /></main>
       </div>
     </div>
   )

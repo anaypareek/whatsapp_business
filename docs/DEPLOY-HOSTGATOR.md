@@ -178,3 +178,16 @@ Root access, any PHP version, real Node, and no ModSecurity surprises.
 - [ ] AutoSSL/certbot active; cron added
 - [ ] Meta Settings saved, webhook verified, fields subscribed, numbers and templates synced
 - [ ] API key created for the Oswal Soap store
+
+## Updating from GitHub (no Node needed)
+`web/dist` is committed, so a pull updates the frontend too. On the server:
+```bash
+cd ~/whatsappwork.fineoutput.com        # repo root (the domain's document root)
+git pull origin main
+cd api
+composer install --no-dev --optimize-autoloader
+php artisan migrate --force
+php artisan config:clear && php artisan route:clear && php artisan view:clear
+php artisan config:cache && php artisan route:cache && php artisan view:cache
+cd .. && cp deploy/hostgator-root.htaccess .htaccess   # adds the /number-requests, /template-requests, /template-stats/{id} client routes
+```

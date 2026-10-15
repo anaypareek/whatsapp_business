@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Send, Inbox, AlertTriangle, Phone, FileText, Bot, Users, KeyRound, MessagesSquare, Plus, RefreshCw, ArrowUpRight, ArrowDownRight, TrendingUp } from 'lucide-react'
+import { Send, Inbox, AlertTriangle, Phone, FileText, Bot, Users, KeyRound, MessagesSquare, Plus, RefreshCw, ArrowUpRight, ArrowDownRight, TrendingUp, PhoneCall, ClipboardList } from 'lucide-react'
 import { api, fmtShort } from './api'
 import { Card, PageHeader, Skeleton, Button, Empty, Avatar, useToast } from './ui'
 
@@ -78,6 +78,10 @@ export default function Dashboard({ go, user }) {
       <Stat icon={MessagesSquare} tone="green" label="Conversations" value={d?.conversations} loading={L} sub={`${d?.contacts ?? 0} unique contacts`} />
     </div>
 
+    {user.is_admin && d && (d.pending_requests.numbers + d.pending_requests.templates > 0) && <div className="pending-strip">
+      <button onClick={() => go('number-requests')}><PhoneCall size={18} /><b>{d.pending_requests.numbers}</b><span>pending number request{d.pending_requests.numbers === 1 ? '' : 's'}</span></button>
+      <button onClick={() => go('template-requests')}><ClipboardList size={18} /><b>{d.pending_requests.templates}</b><span>pending template request{d.pending_requests.templates === 1 ? '' : 's'}</span></button>
+    </div>}
     <div className="mini-stats">
       <div className="mini"><Phone size={18} /><b>{L ? '–' : d.phone_numbers}</b><span>Numbers</span></div>
       <div className="mini"><Bot size={18} /><b>{L ? '–' : d.auto_replies_active}</b><span>Active rules</span></div>

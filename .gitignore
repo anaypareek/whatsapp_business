@@ -7,9 +7,7 @@ api/.env
 # dependencies
 vendor/
 node_modules/
-# build output
-web/dist/
-dist/
+# build output (web/dist IS committed: the server has no Node, so `git pull` alone updates the frontend)
 api/public/build/
 api/public/hot
 api/public/storage

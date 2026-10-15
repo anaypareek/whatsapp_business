@@ -42,9 +42,11 @@ export function toForm(t) {
     buttons: (BT?.buttons || []).map((b) => ({ type: b.type, text: b.text, url: b.url || '', phone_number: b.phone_number || '', example: b.example?.[0] || '' })),
   }
 }
-const blankForm = () => ({ name: '', language: 'en_US', category: 'UTILITY', header: { format: 'NONE', text: '', example: '' }, body: { text: '', examples: [] }, footer: '', buttons: [] })
+export const blankForm = () => ({ name: '', language: 'en_US', category: 'UTILITY', header: { format: 'NONE', text: '', example: '' }, body: { text: '', examples: [] }, footer: '', buttons: [] })
 
-function TemplateForm({ initial, editing, onDone, onCancel }) {
+/** Full template builder with live preview. Reused by the admin (Template Master, Template Requests) and the client portal.
+ *  submit(body) overrides the default POST/PUT to /templates; title/subtitle/submitLabel/note customise the header. */
+export function TemplateForm({ initial, editing, onDone, onCancel, submit, title, subtitle, submitLabel, note, extraActions }) {
   const [f, setF] = useState(initial)
   const [busy, setBusy] = useState(false); const toast = useToast()
   const n = countVars(f.body.text)
@@ -54,15 +56,16 @@ function TemplateForm({ initial, editing, onDone, onCancel }) {
   const save = async (e) => {
     e.preventDefault(); setBusy(true)
     const body = { ...f, header: f.header.format === 'NONE' ? null : f.header, body: { text: f.body.text, examples: f.body.examples.slice(0, n) }, footer: f.footer || null }
-    try { await api(editing ? `/templates/${editing.id}` : '/templates', { method: editing ? 'PUT' : 'POST', body }); onDone() }
+    try { if (submit) await submit(body); else await api(editing ? `/templates/${editing.id}` : '/templates', { method: editing ? 'PUT' : 'POST', body }); onDone() }
     catch (e) { toast.error(e.message) } finally { setBusy(false) }
   }
   return (<div className="page">
-    <PageHeader icon={editing ? Pencil : Plus} title={editing ? `Edit ${editing.name}` : 'New template'} subtitle={editing ? `${editing.language} · ${editing.category}` : 'Submitted to Meta for review'}>
-      <Button icon={X} onClick={onCancel}>Cancel</Button></PageHeader>
+    <PageHeader icon={editing ? Pencil : Plus} title={title || (editing ? `Edit ${editing.name}` : 'New template')} subtitle={subtitle || (editing ? `${editing.language} · ${editing.category}` : 'Submitted to Meta for review')}>
+      {extraActions}<Button icon={X} onClick={onCancel}>Cancel</Button></PageHeader>
     <div className="grid-2-1">
       <Card title="Template content" icon={FileText}>
         <form className="form" onSubmit={save}>
+          {note}
           {editing && <div className="alert info"><Lock size={16} /> Name and language can't be changed. Approved templates keep their category and allow 1 edit per 24h and 10 per 30 days. Edited templates go back to review.</div>}
           <div className="form-3">
             <Field label="Name" hint="lowercase_with_underscores"><input disabled={!!editing} value={f.name} onChange={(e) => set({ name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })} required /></Field>
@@ -88,7 +91,7 @@ function TemplateForm({ initial, editing, onDone, onCancel }) {
             {b.type === 'URL' && countVars(b.url) > 0 && <input placeholder="Example full URL" value={b.example} onChange={(e) => setBtn(i, { example: e.target.value })} />}
             {b.type === 'PHONE_NUMBER' && <input placeholder="+919876543210" value={b.phone_number} onChange={(e) => setBtn(i, { phone_number: e.target.value })} />}
             <Button size="sm" variant="ghost-danger" icon={Trash2} onClick={() => set({ buttons: f.buttons.filter((_, j) => j !== i) })} /></div>)}
-          <div><Button type="submit" variant="primary" icon={Send} loading={busy}>{editing ? 'Submit edit to Meta' : 'Submit for review'}</Button></div>
+          <div><Button type="submit" variant="primary" icon={Send} loading={busy}>{submitLabel || (editing ? 'Submit edit to Meta' : 'Submit for review')}</Button></div>
         </form>
       </Card>
       <div className="sticky"><Card title="Live preview" icon={Eye}><Preview form={f} /></Card></div>
