@@ -12,6 +12,44 @@ class MessageTemplate extends Model
     public const MAX_EDITS_30D = 10;
 
     protected $guarded = [];
+
+    /** Meta's built-in sample templates are hidden everywhere (flagged rows are kept only when messages reference them). */
+    protected static function booted(): void
+    {
+        static::addGlobalScope('not_sample', fn ($q) => $q->where($q->qualifyColumn('is_sample'), false));
+    }
+
+    public static function sampleRule(): array
+    {
+        $c = config('whatsapp.sample_templates') ?: [];
+        return ['names' => array_map('strtolower', $c['names'] ?? ['hello_world']), 'prefixes' => array_map('strtolower', $c['prefixes'] ?? ['sample_'])];
+    }
+
+    /** True for Meta-provided sample templates. Note: `library_template_name` is NOT a sample marker; Meta sets it on
+     *  the business's own templates created from the Template Library, so it is deliberately ignored here. */
+    public static function isSample(string $name): bool
+    {
+        $n = strtolower(trim($name)); $r = self::sampleRule();
+        if (in_array($n, $r['names'], true)) return true;
+        foreach ($r['prefixes'] as $p) if ($p !== '' && str_starts_with($n, $p)) return true;
+        return false;
+    }
+
+    /** Delete local sample rows; ones still referenced by messages/requests are flagged is_sample (hidden) instead. */
+    public static function purgeSamples(): array
+    {
+        $deleted = $hidden = 0;
+        foreach (\Illuminate\Support\Facades\DB::table('message_templates')->get(['id', 'name']) as $t) {
+            if (! self::isSample($t->name)) continue;
+            $used = false;
+            foreach (['messages', 'template_requests'] as $tbl) {
+                if (\Illuminate\Support\Facades\Schema::hasColumn($tbl, 'message_template_id') && \Illuminate\Support\Facades\DB::table($tbl)->where('message_template_id', $t->id)->exists()) $used = true;
+            }
+            if ($used) $hidden += \Illuminate\Support\Facades\DB::table('message_templates')->where('id', $t->id)->update(['is_sample' => true]);
+            else $deleted += \Illuminate\Support\Facades\DB::table('message_templates')->where('id', $t->id)->delete();
+        }
+        return ['deleted' => $deleted, 'hidden' => $hidden];
+    }
     protected $casts = ['components' => 'array', 'last_synced_at' => 'datetime'];
     protected $appends = ['edit_check', 'body_variable_count', 'header_variable_count', 'header_format'];
 

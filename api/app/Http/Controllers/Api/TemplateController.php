@@ -103,9 +103,11 @@ class TemplateController extends Controller
     {
         try { $remote = $wa->listTemplates(); } catch (Throwable $e) { return $this->fail($e); }
         $waba = Setting::get('waba_id');
-        $ids = collect($remote)->map(fn ($t) => MessageTemplate::fromMeta($t, $waba)->id);
+        [$samples, $own] = collect($remote)->partition(fn ($t) => MessageTemplate::isSample($t['name'] ?? ''));
+        $ids = $own->map(fn ($t) => MessageTemplate::fromMeta($t, $waba)->id)->values();
+        $purged = MessageTemplate::purgeSamples();
         // templates deleted on Meta's side
         $removed = MessageTemplate::whereNotNull('meta_id')->whereNotIn('id', $ids)->delete();
-        return ['synced' => $ids->count(), 'removed' => $removed];
+        return ['synced' => $ids->count(), 'removed' => $removed + $purged['deleted'], 'skipped_samples' => $samples->count()];
     }
 }

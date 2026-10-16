@@ -84,9 +84,9 @@ class WebhookProcessor
     protected function templateEvent(string $field, array $v, ?string $waba): void
     {
         $id = (string) ($v['message_template_id'] ?? '');
-        $t = $id !== '' ? MessageTemplate::where('meta_id', $id)->first() : null;
+        $t = $id !== '' ? MessageTemplate::withoutGlobalScope('not_sample')->where('meta_id', $id)->first() : null;
         if (! $t && ! empty($v['message_template_name'])) {
-            $t = MessageTemplate::where('name', $v['message_template_name'])->where('language', $v['message_template_language'] ?? '')->first();
+            $t = MessageTemplate::withoutGlobalScope('not_sample')->where('name', $v['message_template_name'])->where('language', $v['message_template_language'] ?? '')->first();
         }
         $event = null; $reason = null;
         if ($field === 'message_template_status_update') {

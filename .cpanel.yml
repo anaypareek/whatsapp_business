@@ -7,7 +7,7 @@ deployment:
   tasks:
     - /bin/test -f $HOME/composer.phar || (cd $HOME && /usr/bin/curl -sS https://getcomposer.org/installer | /opt/cpanel/ea-php83/root/usr/bin/php -- --quiet --install-dir=$HOME --filename=composer.phar)
     - cd $HOME/whatsappwork.fineoutput.com/api && COMPOSER_HOME=$HOME/.composer /opt/cpanel/ea-php83/root/usr/bin/php -d memory_limit=-1 $HOME/composer.phar install --no-dev --optimize-autoloader --no-interaction --no-progress
-    - cd $HOME/whatsappwork.fineoutput.com/api && /opt/cpanel/ea-php83/root/usr/bin/php artisan migrate --force --no-interaction
+    - cd $HOME/whatsappwork.fineoutput.com/api && /opt/cpanel/ea-php83/root/usr/bin/php artisan config:clear && /opt/cpanel/ea-php83/root/usr/bin/php artisan migrate --force --no-interaction
     - cd $HOME/whatsappwork.fineoutput.com/api && /opt/cpanel/ea-php83/root/usr/bin/php artisan config:cache && /opt/cpanel/ea-php83/root/usr/bin/php artisan route:cache && /opt/cpanel/ea-php83/root/usr/bin/php artisan view:cache
     - /bin/cp -f $HOME/whatsappwork.fineoutput.com/deploy/hostgator-root.htaccess $HOME/whatsappwork.fineoutput.com/.htaccess
     - /bin/cp -f $HOME/whatsappwork.fineoutput.com/deploy/deny.htaccess $HOME/whatsappwork.fineoutput.com/docs/.htaccess
