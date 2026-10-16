@@ -6,4 +6,6 @@ import { setTokenKey } from './api'
 import { ToastProvider } from './ui'
 import PortalApp from './PortalApp.jsx'
 setTokenKey('wab_client_token')
+import { installErrorReporter } from './errorlogs'
+installErrorReporter('/api', 'portal')
 createRoot(document.getElementById('root')).render(<StrictMode><ToastProvider><PortalApp /></ToastProvider></StrictMode>)

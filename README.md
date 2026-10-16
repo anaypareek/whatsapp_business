@@ -121,3 +121,25 @@ Admin → **Automation Flows** (every number; pick a client's number first) and 
 API (admin `/api/...`, client `/api/client/...`, same shape): `GET flow-numbers`, `GET|POST flows`, `GET|PUT|DELETE flows/{id}`, `POST flows/{id}/duplicate`,
 `GET flows/{id}/stats`, `POST flows-simulate`. Client requests for another client's flow return 404, and the admin API returns 403 for client tokens.
 `tools/mock-meta.php` validates interactive payloads the way Meta does (1–3 buttons with titles ≤20, list of 1–10 rows with titles ≤24, list button text ≤20, body ≤1024).
+
+## Updating the live site (cPanel, no terminal)
+
+The repo has a `.cpanel.yml`, so every update is two clicks in cPanel:
+
+1. cPanel → **Files → Git™ Version Control** → find `whatsappwork.fineoutput.com` → **Manage**.
+2. Open the **Pull or Deploy** tab → click **Update from Remote** (pulls the latest `main` from GitHub).
+3. On the same tab click **Deploy HEAD Commit**. This runs `.cpanel.yml`, which:
+   - downloads `~/composer.phar` if it is missing;
+   - runs `composer install --no-dev -o` with PHP 8.3 (`/opt/cpanel/ea-php83/root/usr/bin/php`);
+   - runs `php artisan migrate --force`;
+   - rebuilds the config, route and view caches;
+   - copies `deploy/hostgator-root.htaccess` to `.htaccess` and `deploy/deny.htaccess` to `docs/.htaccess` and `tools/.htaccess`.
+4. The **Last Deployment Information** box shows the commit and time. To see the full output, open the log under `~/.cpanel/logs/` in File Manager.
+
+All the tasks are safe to run more than once. `web/dist` is committed, so the server never needs Node.
+The generated `.htaccess` files are gitignored, and so are `vendor/`, `storage/` and `bootstrap/cache/`, which keeps the working tree clean.
+cPanel refuses to deploy from a dirty tree, so this matters.
+`.env` stays on the server and is never touched. After editing it, click **Deploy HEAD Commit** again to rebuild the config cache.
+
+**Error Logs:** Admin → Setup → **Error Logs** lists server exceptions, failed Meta API calls (endpoint, HTTP status, Meta code and message) and browser JS errors, with secrets redacted.
+Each error toast shows "(ref #ID)", which matches a row on this page. Entries are kept for 30 days and pruned daily by the existing `schedule:run` cron job.

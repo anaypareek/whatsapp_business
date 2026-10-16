@@ -19,6 +19,8 @@ if (preg_match('#/message_templates$#', $path)) {
     $m = $_SERVER['REQUEST_METHOD'];
     if ($m === 'GET') { echo json_encode(['data' => $tpls, 'paging' => ['cursors' => ['before' => 'x', 'after' => 'y']]]); return; }
     if ($m === 'POST') { $id = 'MOCKTPL'.rand(100, 99999); $tpls[] = ['id' => $id, 'status' => 'PENDING'] + $in; $save(); echo json_encode(['id' => $id, 'status' => 'PENDING', 'category' => $in['category'] ?? 'UTILITY']); return; }
+    if ($m === 'DELETE' && str_starts_with($_GET['name'] ?? '', 'sample_')) { http_response_code(400); echo json_encode(['error' => ['message' => 'Invalid parameter', 'type' => 'OAuthException', 'code' => 100, 'error_subcode' => 2593002, 'is_transient' => false,
+        'error_user_title' => 'Sample template cannot be deleted', 'error_user_msg' => 'Sample templates provided by Meta can not be deleted.', 'fbtrace_id' => 'MOCK'.bin2hex(random_bytes(4))]]); return; }
     if ($m === 'DELETE') { $tpls = array_values(array_filter($tpls, fn ($t) => ! ($t['name'] === ($_GET['name'] ?? '') && (empty($_GET['hsm_id']) || $t['id'] === $_GET['hsm_id'])))); $save(); echo json_encode(['success' => true]); return; }
 }
 if (preg_match('#/(MOCKTPL\d+)$#', $path, $mm) && $_SERVER['REQUEST_METHOD'] === 'POST') {

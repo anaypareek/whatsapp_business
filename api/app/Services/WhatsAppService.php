@@ -22,11 +22,15 @@ class WhatsAppService
         return Http::withToken($token)->acceptJson()->timeout(30);
     }
 
+    /** Throws MetaApiException (with Meta's error fields) for failed calls; each failure is stored in error_logs. */
     protected function check($res): array
     {
         if ($res->failed()) {
-            $err = $res->json('error.message') ?? $res->body();
-            throw new RuntimeException('Meta API error ('.$res->status().'): '.$err);
+            $req = $res->transferStats?->getRequest();
+            $endpoint = $req ? preg_replace('#^https?://[^/]+#', '', (string) $req->getUri()) : '?';
+            $e = new MetaApiException($res->status(), $req?->getMethod() ?? '?', ErrorLogger::redactString($endpoint), (array) ($res->json('error') ?? []), $res->body());
+            ErrorLogger::exception($e, 'error', ['source' => 'meta', 'status_code' => $res->status()]);
+            throw $e;
         }
         return $res->json() ?? [];
     }

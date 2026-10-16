@@ -23,7 +23,7 @@ export async function api(path, { method = 'GET', body, form } = {}) {
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     const msg = data.errors ? Object.values(data.errors).flat().join(' ') : data.message || data.error || `HTTP ${res.status}`
-    const err = new Error(msg); err.data = data; throw err
+    const err = new Error(data.log_id ? `${msg} (ref #${data.log_id})` : msg); err.data = data; err.status = res.status; throw err
   }
   return data
 }

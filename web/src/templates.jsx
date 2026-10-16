@@ -108,7 +108,15 @@ export function Templates() {
   useEffect(() => { load() }, [load])
   useEffect(() => { const t = setInterval(load, 15000); return () => clearInterval(t) }, [load])
   const sync = async () => { try { const r = await api('/templates-sync', { method: 'POST' }); toast.success(`Synced ${r.synced} template(s)${r.removed ? `, removed ${r.removed}` : ''}`); load() } catch (e) { toast.error(e.message) } }
-  const del = async (t) => { if (!confirm(`Delete template ${t.name} (${t.language}) on Meta? The name can't be reused for 30 days.`)) return; try { await api(`/templates/${t.id}`, { method: 'DELETE' }); toast.success('Template deleted'); if (mode?.view?.id === t.id) setMode(null); load() } catch (e) { toast.error(e.message) } }
+  const del = async (t) => {
+    if (!confirm(t.meta_id ? `Delete template ${t.name} (${t.language}) on Meta? The name can't be reused for 30 days.` : `Delete template ${t.name} (${t.language})? It was never created on Meta.`)) return
+    const done = (msg) => { toast.success(msg); if (mode?.view?.id === t.id) setMode(null); load() }
+    try { const r = await api(`/templates/${t.id}`, { method: 'DELETE' }); done(r?.message || 'Template deleted') } catch (e) {
+      toast.error(e.message)
+      if (!e.data?.can_remove_locally || !confirm(`Meta refused to delete "${t.name}":\n\n${e.data.message}\n\nRemove it from this portal only? (It stays on Meta and comes back on the next "Sync from Meta".)`)) return
+      try { const r = await api(`/templates/${t.id}?local_only=1`, { method: 'DELETE' }); done(r?.message || 'Removed from this portal') } catch (e2) { toast.error(e2.message) }
+    }
+  }
   const edit = (t) => { if (!t.edit_check.allowed) { toast.error(`Edit not allowed: ${t.edit_check.reason}`); return } setMode({ edit: t }) }
   const view = async (t) => { try { setMode({ view: await api(`/templates/${t.id}`) }) } catch (e) { toast.error(e.message) } }
   const all = rows || []

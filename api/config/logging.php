@@ -54,8 +54,15 @@ return [
 
         'stack' => [
             'driver' => 'stack',
-            'channels' => explode(',', (string) env('LOG_STACK', 'single')),
+            // "database" (error_logs table, warning and above) is always part of the stack
+            'channels' => array_values(array_unique(array_merge(explode(',', (string) env('LOG_STACK', 'single')), ['database']))),
             'ignore_exceptions' => false,
+        ],
+
+        'database' => [
+            'driver' => 'custom',
+            'via' => App\Logging\DatabaseLogger::class,
+            'level' => 'warning',
         ],
 
         'single' => [

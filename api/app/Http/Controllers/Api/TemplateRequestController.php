@@ -57,7 +57,7 @@ class TemplateRequestController extends Controller
             $res = $wa->createTemplate(['name' => $t->name, 'language' => $t->language, 'category' => $t->category, 'components' => $t->components]);
         } catch (Throwable $e) {
             $t->update(['meta_error' => $e->getMessage()]);
-            return response()->json(['message' => $e->getMessage(), 'request' => $t->fresh()->load(self::WITH)], 502);
+            return $this->fail($e, 502, ['request' => $t->fresh()->load(self::WITH)]);
         }
         $tpl = MessageTemplate::create([
             'client_id' => $t->client_id, 'meta_id' => $res['id'] ?? null, 'waba_id' => Setting::get('waba_id'),

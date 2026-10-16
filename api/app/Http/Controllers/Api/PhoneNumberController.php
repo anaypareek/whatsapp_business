@@ -34,7 +34,7 @@ class PhoneNumberController extends Controller
 
     public function sync(WhatsAppService $wa)
     {
-        try { $remote = $wa->listPhoneNumbers(); } catch (Throwable $e) { return response()->json(['message' => $e->getMessage()], 502); }
+        try { $remote = $wa->listPhoneNumbers(); } catch (Throwable $e) { return $this->fail($e); }
         $waba = Setting::get('waba_id');
         foreach ($remote as $n) {
             PhoneNumber::updateOrCreate(['phone_number_id' => $n['id']], [
@@ -48,6 +48,6 @@ class PhoneNumberController extends Controller
     {
         $d = $r->validate(['pin' => 'required|digits:6']);
         try { return $wa->registerNumber($phoneNumber->phone_number_id, $d['pin']); }
-        catch (Throwable $e) { return response()->json(['message' => $e->getMessage()], 502); }
+        catch (Throwable $e) { return $this->fail($e); }
     }
 }

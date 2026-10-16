@@ -11,6 +11,9 @@ Route::post('/auth/login', [Api\AuthController::class, 'login'])->middleware('th
 Route::get('/webhook/whatsapp', [Api\WebhookController::class, 'verify']);
 Route::post('/webhook/whatsapp', [Api\WebhookController::class, 'receive']);
 
+// browser JS errors from both portals (public: errors can happen before/without login)
+Route::post('/client-errors', [Api\ErrorLogController::class, 'report'])->middleware('throttle:20,1');
+
 Route::post('/v1/messages/send', Api\ExternalSendController::class)->middleware([ApiKeyAuth::class, 'throttle:120,1']);
 
 // ---- Client portal ----
@@ -75,6 +78,11 @@ Route::middleware(['auth:sanctum', EnsureStaff::class])->group(function () {
     Route::get('/clients-list', fn () => \App\Models\Client::orderBy('name')->get(['id', 'name', 'company', 'is_active']));
 
     Route::middleware(EnsureAdmin::class)->group(function () {
+        Route::get('/error-logs/count', [Api\ErrorLogController::class, 'count']);
+        Route::delete('/error-logs/clear', [Api\ErrorLogController::class, 'clear']);
+        Route::get('/error-logs', [Api\ErrorLogController::class, 'index']);
+        Route::get('/error-logs/{errorLog}', [Api\ErrorLogController::class, 'show']);
+        Route::post('/error-logs/{errorLog}/resolve', [Api\ErrorLogController::class, 'resolve']);
         Route::apiResource('clients', Api\ClientController::class);
         Route::get('/requests/pending-counts', fn () => ['numbers' => \App\Models\PhoneNumberRequest::where('status', 'pending')->count(),
             'templates' => \App\Models\TemplateRequest::where('status', 'pending')->count()]);

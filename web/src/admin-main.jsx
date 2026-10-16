@@ -5,5 +5,7 @@ import './index.css'
 import App from './App.jsx'
 import { setTokenKey } from './api'
 setTokenKey('wab_token')
+import { installErrorReporter } from './errorlogs'
+installErrorReporter('/api', 'admin')
 import { ToastProvider } from './ui'
 createRoot(document.getElementById('root')).render(<StrictMode><ToastProvider><App /></ToastProvider></StrictMode>)

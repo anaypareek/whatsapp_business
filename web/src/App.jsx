@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { LayoutDashboard, MessagesSquare, Send, FileText, Phone, Bot, Users as UsersIcon, KeyRound, Settings as SettingsIcon, LogOut, Menu, ChevronDown, Bell, MessageCircle, Briefcase, PhoneCall, ClipboardList, Workflow } from 'lucide-react'
+import { LayoutDashboard, MessagesSquare, Send, FileText, Phone, Bot, Users as UsersIcon, KeyRound, Settings as SettingsIcon, LogOut, Menu, ChevronDown, Bell, MessageCircle, Briefcase, PhoneCall, ClipboardList, Workflow, Bug } from 'lucide-react'
 import { api, getToken, setToken } from './api'
 import { Spinner } from './ui'
 import { ADMIN_BASE } from './config'
@@ -9,15 +9,16 @@ import { Templates } from './templates'
 import { Clients } from './clients'
 import { NumberRequests, TemplateRequests } from './requests'
 import { Flows } from './flows'
+import { ErrorLogs } from './errorlogs'
 import { Users, Numbers, SendMessage, Chat, AutoReplies, Settings, ApiKeys } from './pages'
 
 const NAV = [
   { group: 'Overview', items: [['dashboard', 'Dashboard', LayoutDashboard]] },
   { group: 'Messaging', items: [['chat', 'Chat Master', MessagesSquare], ['send', 'Send Message', Send], ['templates', 'Template Master', FileText], ['flows', 'Automation Flows', Workflow], ['rules', 'Auto-replies', Bot]] },
   { group: 'Requests', items: [['number-requests', 'Number Requests', PhoneCall, true], ['template-requests', 'Template Requests', ClipboardList, true]] },
-  { group: 'Setup', items: [['clients', 'Clients', Briefcase, true], ['numbers', 'Number Master', Phone], ['users', 'Users', UsersIcon, true], ['keys', 'API Keys', KeyRound, true], ['settings', 'Settings', SettingsIcon, true]] },
+  { group: 'Setup', items: [['clients', 'Clients', Briefcase, true], ['numbers', 'Number Master', Phone], ['users', 'Users', UsersIcon, true], ['keys', 'API Keys', KeyRound, true], ['settings', 'Settings', SettingsIcon, true], ['error-logs', 'Error Logs', Bug, true]] },
 ]
-const PAGES = { flows: () => <Flows scope="admin" />, 'number-requests': NumberRequests, 'template-requests': TemplateRequests, clients: Clients, dashboard: Dashboard, chat: Chat, send: SendMessage, templates: Templates, numbers: Numbers, rules: AutoReplies, users: Users, keys: ApiKeys, settings: Settings }
+const PAGES = { 'error-logs': ErrorLogs, flows: () => <Flows scope="admin" />, 'number-requests': NumberRequests, 'template-requests': TemplateRequests, clients: Clients, dashboard: Dashboard, chat: Chat, send: SendMessage, templates: Templates, numbers: Numbers, rules: AutoReplies, users: Users, keys: ApiKeys, settings: Settings }
 const TITLES = Object.fromEntries(NAV.flatMap((g) => g.items.map(([k, l]) => [k, l])))
 
 export default function App() {
@@ -29,7 +30,8 @@ export default function App() {
   const [menu, setMenu] = useState(false)
   const [unread, setUnread] = useState(0)
   const [pending, setPending] = useState({ numbers: 0, templates: 0 })
-  const loadPending = () => user?.is_admin && api('/requests/pending-counts').then(setPending).catch(() => {})
+  const [errCount, setErrCount] = useState(0)
+  const loadPending = () => { if (!user?.is_admin) return; api('/requests/pending-counts').then(setPending).catch(() => {}); api('/error-logs/count').then((c) => setErrCount(c.open)).catch(() => {}) }
   const menuRef = useRef()
 
   useEffect(() => { if (getToken()) api('/auth/me').then(setUser).catch(() => setToken(null)).finally(() => setBooting(false)) }, [])
@@ -64,7 +66,8 @@ export default function App() {
             <button key={k} className={`nav-item ${tab === k ? 'active' : ''}`} onClick={() => go(k)}><Icon size={18} /><span>{label}</span>
               {k === 'chat' && unread > 0 && <em className="nav-badge">{unread}</em>}
               {k === 'number-requests' && pending.numbers > 0 && <em className="nav-badge" title="Pending">{pending.numbers}</em>}
-              {k === 'template-requests' && pending.templates > 0 && <em className="nav-badge" title="Pending">{pending.templates}</em>}</button>))}
+              {k === 'template-requests' && pending.templates > 0 && <em className="nav-badge" title="Pending">{pending.templates}</em>}
+              {k === 'error-logs' && errCount > 0 && <em className="nav-badge" title="Unresolved errors">{errCount > 99 ? '99+' : errCount}</em>}</button>))}
         </div>))}</nav>
         <div className="sidebar-foot"><div className="help-card"><b>Need the API?</b><small>Use API Keys to send order alerts from your store.</small>
           {user.is_admin && <button onClick={() => go('keys')}>Manage keys</button>}</div></div>
