@@ -324,11 +324,11 @@ export function ApiKeys() {
   const copy = (t) => navigator.clipboard?.writeText(t).then(() => toast.success('Copied'))
   const curl = `curl -X POST ${location.origin}/api/v1/messages/send \\\n  -H "Authorization: Bearer <API_KEY>" -H "Accept: application/json" \\\n  -H "Content-Type: application/json" \\\n  -d '{"from":"<phone_number_id>","to":"919812345678","text":"New order #1001"}'`
   return (<div className="page">
-    <PageHeader icon={KeyRound} title="API Keys" subtitle="Bearer keys for POST /api/v1/messages/send (e.g. Oswal Soap order alerts)" />
+    <PageHeader icon={KeyRound} title="API Keys" subtitle="Bearer keys for POST /api/v1/messages/send (e.g. website order alerts)" />
     <div className="grid-form">
       <div className="stack-cards">
         <Card title="Generate key" icon={Plus}>
-          <form className="form" onSubmit={add}><Field label="Key name"><input placeholder="e.g. Oswal Soap orders" value={name} onChange={(e) => setName(e.target.value)} required /></Field>
+          <form className="form" onSubmit={add}><Field label="Key name"><input placeholder="e.g. Website orders" value={name} onChange={(e) => setName(e.target.value)} required /></Field>
             <Button type="submit" variant="primary" icon={KeyRound} loading={busy}>Generate key</Button></form>
           {plain && <div className="alert success"><b>Copy now, it won't be shown again:</b><div className="copy-row"><code className="grow">{plain}</code><Button size="sm" icon={Copy} onClick={() => copy(plain)} /></div></div>}
         </Card>

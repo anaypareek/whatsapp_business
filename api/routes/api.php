@@ -24,6 +24,8 @@ Route::middleware(['auth:sanctum', EnsureClient::class])->prefix('client')->grou
     Route::get('/dashboard', [Api\ClientPortalController::class, 'dashboard']);
     Route::get('/numbers', [Api\ClientPortalController::class, 'numbers']);
     Route::get('/templates', [Api\ClientPortalController::class, 'templates']);
+    Route::get('/templates/{template}/test', [Api\TemplateController::class, 'testPreview']);
+    Route::post('/templates/{template}/test', [Api\TemplateController::class, 'testSend'])->middleware('throttle:20,1');
     Route::get('/conversations', [Api\ClientPortalController::class, 'conversations']);
     Route::get('/messages/thread', [Api\ClientPortalController::class, 'thread']);
     Route::get('/messages/poll', [Api\ClientPortalController::class, 'poll']);
@@ -56,6 +58,8 @@ Route::middleware(['auth:sanctum', EnsureStaff::class])->group(function () {
     Route::post('/phone-numbers/{phoneNumber}/register', [Api\PhoneNumberController::class, 'register']);
 
     Route::apiResource('templates', Api\TemplateController::class);
+    Route::get('/templates/{template}/test', [Api\TemplateController::class, 'testPreview']);
+    Route::post('/templates/{template}/test', [Api\TemplateController::class, 'testSend'])->middleware('throttle:20,1');
     Route::post('/templates-sync', [Api\TemplateController::class, 'sync']);
     Route::post('/messages/send-template', [Api\MessageController::class, 'sendTemplate']);
     Route::post('/messages/send', [Api\MessageController::class, 'send']);

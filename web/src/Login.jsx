@@ -6,7 +6,7 @@ import { Button } from './ui'
 function PhoneArt() {
   return (<div className="art">
     <div className="art-phone">
-      <div className="art-top"><span className="art-av" /><div><b>Oswal Soap</b><small>online</small></div></div>
+      <div className="art-top"><span className="art-av" /><div><b>Fineoutput</b><small>online</small></div></div>
       <div className="art-chat">
         <div className="art-b in">Hi! Is my order shipped? 📦</div>
         <div className="art-b out">Yes! Order #OS-1001 is on the way 🚚<span><CheckCheck size={13} /></span></div>
@@ -20,7 +20,7 @@ function PhoneArt() {
   </div>)
 }
 
-export default function Login({ onLogin, endpoint = '/auth/login', brand = 'WA Business', sub = 'Oswal Soap portal', heading = 'Welcome back 👋', blurb = 'Sign in to manage your WhatsApp Business account', footer = 'Forgot? Ask your admin' }) {
+export default function Login({ onLogin, endpoint = '/auth/login', brand = 'WA Business Fineoutput Portal', sub = 'Admin panel', heading = 'Welcome back 👋', blurb = 'Sign in to manage your WhatsApp Business account', footer = 'Forgot? Ask your admin' }) {
   const [email, setEmail] = useState(''); const [password, setPassword] = useState('')
   const [show, setShow] = useState(false); const [remember, setRemember] = useState(true)
   const [err, setErr] = useState(''); const [busy, setBusy] = useState(false)
@@ -53,7 +53,7 @@ export default function Login({ onLogin, endpoint = '/auth/login', brand = 'WA B
             <span className="muted small">{footer}</span></div>
           {err && <div className="alert error">{err}</div>}
           <Button type="submit" variant="primary" size="lg" loading={busy} className="w100">{busy ? 'Signing in…' : 'Sign in'}</Button>
-          <p className="login-foot">Secured with Laravel Sanctum · © {new Date().getFullYear()} Oswal Soap</p>
+          <p className="login-foot">Secured with Laravel Sanctum · © {new Date().getFullYear()} Fineoutput</p>
         </form>
       </div>
     </div>

@@ -1,4 +1,4 @@
-# WhatsApp Business Portal (Laravel + MySQL + React/Vite)
+# WA Business Fineoutput Portal (Laravel + MySQL + React/Vite)
 
 Owner: Vibhav Pareek · timezone Asia/Kolkata. Built on Meta WhatsApp Cloud API (Graph v26.0, see `docs/meta-api-notes.md`).
 
@@ -143,3 +143,19 @@ cPanel refuses to deploy from a dirty tree, so this matters.
 
 **Error Logs:** Admin → Setup → **Error Logs** lists server exceptions, failed Meta API calls (endpoint, HTTP status, Meta code and message) and browser JS errors, with secrets redacted.
 Each error toast shows "(ref #ID)", which matches a row on this page. Entries are kept for 30 days and pruned daily by the existing `schedule:run` cron job.
+
+## Template Master: Test button and client tagging
+
+- **Test** on any APPROVED template opens a modal where you pick the **From** number (from Number Master) and enter a **To** number with country code. Demo values are filled in automatically, and the modal previews them before anything is sent:
+  - header text → `Demo`
+  - media header → a public sample image, video or PDF (override with `WA_DEMO_IMAGE_URL`, `WA_DEMO_VIDEO_URL` or `WA_DEMO_DOCUMENT_URL`)
+  - body `{{n}}` → `Demo n`; named parameters → the parameter name
+  - URL button → `demo`; OTP and copy-code buttons → a code
+- The send goes through the Meta Cloud API. The modal shows either the returned `wamid` or Meta's exact error.
+- Every test is logged in Chat with source `test`. Failures also go to Error Logs.
+- Clients get the same Test button on **My templates**. They can only test their own templates, from their own numbers.
+- **Client** tagging works in three places:
+  - the New / Edit template form has an optional Client dropdown (None / Internal is allowed);
+  - synced templates can be tagged from the template's side panel;
+  - the list has a client filter at the top (All / Unassigned / each client).
+- Templates created by approving a client's template request are tagged with that client automatically. Tagged APPROVED templates appear in that client's portal.

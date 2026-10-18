@@ -1,8 +1,9 @@
 // Client portal (served at /). Must not import or mention the admin path.
 import { useEffect, useRef, useState } from 'react'
-import { LayoutDashboard, MessagesSquare, Phone, FileText, LogOut, Menu, ChevronDown, Bell, MessageCircle, Send, Inbox, CheckCheck, PhoneCall, ClipboardList, Workflow } from 'lucide-react'
+import { LayoutDashboard, MessagesSquare, Phone, FileText, LogOut, Menu, ChevronDown, Bell, MessageCircle, Send, Inbox, CheckCheck, PhoneCall, ClipboardList, Workflow, FlaskConical } from 'lucide-react'
 import { api, getToken, setToken, fmtTime } from './api'
-import { Spinner, Card, PageHeader, Skeleton, Empty, Badge, useLoad, TableSkeleton } from './ui'
+import { Spinner, Card, PageHeader, Skeleton, Empty, Badge, useLoad, TableSkeleton, Button } from './ui'
+import { TestSendModal } from './templates'
 import Login from './Login'
 import { Chat } from './pages'
 import { Flows } from './flows'
@@ -46,12 +47,15 @@ function MyNumbers() {
 
 function MyTemplates() {
   const [rows, , loading] = useLoad('/client/templates')
+  const [testing, setTesting] = useState(null)
   return (<div className="page"><PageHeader icon={FileText} title="My templates" subtitle="Approved message templates assigned to your account" />
-    <Card pad={false}><div className="table-wrap"><table className="table"><thead><tr><th>Template</th><th>Category</th><th>Status</th><th>Updated</th></tr></thead>
-      {loading ? <TableSkeleton cols={4} /> : rows.length ? <tbody>{rows.map((t) => <tr key={t.id}><td><b>{t.name}</b><small className="block muted">{t.language}</small>{t.rejected_reason && <small className="block err-text">Rejected: {t.rejected_reason}</small>}</td>
-        <td>{t.category}</td><td><Badge s={t.status} /></td><td className="muted">{fmtTime(t.updated_at)}</td></tr>)}</tbody>
-        : <tbody><tr><td colSpan={4}><Empty icon={FileText} title="No templates yet" /></td></tr></tbody>}
-    </table></div></Card></div>)
+    <Card pad={false}><div className="table-wrap"><table className="table"><thead><tr><th>Template</th><th>Category</th><th>Status</th><th>Updated</th><th /></tr></thead>
+      {loading ? <TableSkeleton cols={5} /> : rows.length ? <tbody>{rows.map((t) => <tr key={t.id}><td><b>{t.name}</b><small className="block muted">{t.language}</small>{t.rejected_reason && <small className="block err-text">Rejected: {t.rejected_reason}</small>}</td>
+        <td>{t.category}</td><td><Badge s={t.status} /></td><td className="muted">{fmtTime(t.updated_at)}</td>
+        <td className="right"><Button size="sm" variant="ghost" icon={FlaskConical} disabled={t.status !== 'APPROVED'} title={t.status === 'APPROVED' ? 'Send a test with demo values' : 'Only APPROVED templates can be tested'} onClick={() => setTesting(t)}>Test</Button></td></tr>)}</tbody>
+        : <tbody><tr><td colSpan={5}><Empty icon={FileText} title="No templates yet" /></td></tr></tbody>}
+    </table></div></Card>
+    {testing && <TestSendModal template={testing} base="/client" numbersPath="/client/numbers" onClose={() => setTesting(null)} />}</div>)
 }
 
 const NAV = [['dashboard', 'Dashboard', LayoutDashboard], ['chats', 'Chats', MessagesSquare], ['numbers', 'My numbers', Phone], ['templates', 'My templates', FileText], ['flows', 'Automation flows', Workflow],
@@ -69,13 +73,13 @@ export default function PortalApp() {
   const go = (k) => { if (k !== tab) history.pushState(null, '', `/${k}`); setTab(k) }
 
   if (booting) return <div className="boot"><Spinner size={28} /></div>
-  if (!me) return <Login endpoint="/client/auth/login" brand="WA Business" sub="Client portal" heading="Client login" blurb="Sign in to view your WhatsApp numbers and chats" footer="Forgot? Contact your account manager"
+  if (!me) return <Login endpoint="/client/auth/login" brand="WA Business Fineoutput Portal" sub="Client portal" heading="Client login" blurb="Sign in to view your WhatsApp numbers and chats" footer="Forgot? Contact your account manager"
     onLogin={(c) => { setMe(c); history.replaceState(null, '', '/dashboard'); setTab('dashboard') }} />
   const logout = async () => { try { await api('/client/auth/logout', { method: 'POST' }) } catch { /* ignore */ } setToken(null); setMe(null) }
   const label = DETAIL.test(tab) ? 'Template details' : NAV.find(([k]) => k === tab)[1]
   return (<div className={`layout ${navOpen ? 'nav-open' : ''}`}>
     <aside className="sidebar">
-      <div className="logo"><span className="logo-mark"><MessageCircle size={20} /></span><div><b>WA Business</b><small>Client portal</small></div></div>
+      <div className="logo"><span className="logo-mark"><MessageCircle size={20} /></span><div><b>WA Business Fineoutput Portal</b><small>Client portal</small></div></div>
       <nav><div className="nav-group"><div className="nav-label">Menu</div>{NAV.map(([k, l, Icon]) => <button key={k} className={`nav-item ${tab === k || (k === 'dashboard' && DETAIL.test(tab)) ? 'active' : ''}`} onClick={() => go(k)}><Icon size={18} /><span>{l}</span></button>)}</div></nav>
     </aside>
     <div className="scrim" onClick={() => setNavOpen(false)} />

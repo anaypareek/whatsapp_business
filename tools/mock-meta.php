@@ -37,6 +37,6 @@ if (preg_match('#/messages$#', $path) && ($in['type'] ?? '') === 'interactive') 
 }
 if (preg_match('#/messages$#', $path)) { $b = json_decode(file_get_contents('php://input'), true) ?: []; echo json_encode(['messaging_product' => 'whatsapp', 'contacts' => [['input' => $b['to'] ?? '', 'wa_id' => $b['to'] ?? '']], 'messages' => [['id' => 'wamid.MOCK'.bin2hex(random_bytes(6))]]]); }
 elseif (preg_match('#/media$#', $path)) echo json_encode(['id' => 'MOCKMEDIA'.rand(1000, 9999)]);
-elseif (preg_match('#/phone_numbers$#', $path)) echo json_encode(['data' => [['id' => '100000000000001', 'display_phone_number' => '+91 98765 43210', 'verified_name' => 'Oswal Soap', 'quality_rating' => 'GREEN', 'status' => 'CONNECTED']]]);
+elseif (preg_match('#/phone_numbers$#', $path)) echo json_encode(['data' => [['id' => '100000000000001', 'display_phone_number' => '+91 98765 43210', 'verified_name' => 'Fineoutput Demo', 'quality_rating' => 'GREEN', 'status' => 'CONNECTED']]]);
 elseif (preg_match('#/register$#', $path)) echo json_encode(['success' => true]);
 else { http_response_code(404); echo json_encode(['error' => ['message' => 'mock: unknown path']]); }

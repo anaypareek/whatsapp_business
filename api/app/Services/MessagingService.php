@@ -24,6 +24,9 @@ class MessagingService
     }
 
     /** Send an APPROVED template. Throws ValidationException for bad params/unapproved templates. */
+    /** The exception of the last failed send (Meta's error), for callers that want to report it. */
+    public ?Throwable $lastError = null;
+
     public function sendTemplate(PhoneNumber $from, string $to, MessageTemplate $t, array $bodyParams = [], ?string $headerParam = null, array $buttonParams = [], string $source = 'manual'): Message
     {
         if ($t->status !== 'APPROVED') {
@@ -39,9 +42,11 @@ class MessagingService
             'status' => 'pending', 'source' => $source,
         ]);
         try {
+            $this->lastError = null;
             $res = $this->wa->sendTemplate($from->phone_number_id, $to, $t->name, $t->language, $components);
             $msg->fill(['wamid' => $res['messages'][0]['id'] ?? null, 'status' => 'sent', 'raw' => $res]);
         } catch (Throwable $e) {
+            $this->lastError = $e;
             $msg->fill(['status' => 'failed', 'error' => $e->getMessage()]);
         }
         $msg->save();

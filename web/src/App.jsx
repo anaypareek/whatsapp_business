@@ -60,7 +60,7 @@ export default function App() {
   return (
     <div className={`layout ${navOpen ? 'nav-open' : ''}`}>
       <aside className="sidebar">
-        <div className="logo"><span className="logo-mark"><MessageCircle size={20} /></span><div><b>WA Business</b><small>Oswal Soap portal</small></div></div>
+        <div className="logo"><span className="logo-mark"><MessageCircle size={20} /></span><div><b>WA Business Fineoutput Portal</b><small>Admin panel</small></div></div>
         <nav>{NAV.map((g) => (<div key={g.group} className="nav-group"><div className="nav-label">{g.group}</div>
           {g.items.filter(([, , , admin]) => !admin || user.is_admin).map(([k, label, Icon]) => (
             <button key={k} className={`nav-item ${tab === k ? 'active' : ''}`} onClick={() => go(k)}><Icon size={18} /><span>{label}</span>

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { FileText, Plus, RefreshCw, Pencil, Trash2, Send, Search, X, Lock, Eye, History, Phone, Hash, Link2, Reply, PhoneCall } from 'lucide-react'
+import { FileText, Plus, RefreshCw, Pencil, Trash2, Send, Search, X, Lock, Eye, History, Phone, Hash, Link2, Reply, PhoneCall, FlaskConical, CheckCircle2, AlertCircle, Briefcase } from 'lucide-react'
 import { api, fmtTime } from './api'
 import { ClientSelect } from './clients'
-import { Button, Card, PageHeader, Field, TableSkeleton, Empty, Badge as UiBadge, useToast } from './ui'
+import { Button, Card, PageHeader, Field, TableSkeleton, Empty, Modal, Spinner, Badge as UiBadge, useToast } from './ui'
 
 export const LANGS = ['en_US', 'en', 'en_GB', 'hi', 'mr', 'gu', 'bn', 'ta', 'te', 'kn', 'ml', 'pa', 'ur', 'ar', 'es', 'fr', 'de', 'pt_BR', 'id']
 const STATUSES = ['APPROVED', 'PENDING', 'REJECTED', 'PAUSED', 'DISABLED', 'IN_APPEAL']
@@ -17,7 +17,7 @@ export const Badge = ({ s }) => <UiBadge s={s} />
 export function Preview({ form, headerVal, bodyVals, buttonVals }) {
   const h = form.header || {}
   const fmt = h.format || 'NONE'
-  return (<div className="wa-preview"><div className="wa-preview-top"><span className="avatar sm">OS</span><b>Oswal Soap</b></div><div className="wa-preview-body"><div className="bubble out tpl">
+  return (<div className="wa-preview"><div className="wa-preview-top"><span className="avatar sm">FO</span><b>Fineoutput</b></div><div className="wa-preview-body"><div className="bubble out tpl">
     {fmt === 'TEXT' && <div className="tpl-h">{fill(h.text, [headerVal ?? h.example])}</div>}
     {fmt === 'IMAGE' && (headerVal && /^https?:/.test(headerVal) ? <img src={headerVal} alt="" /> : <div className="tpl-media">🖼 Image</div>)}
     {fmt === 'VIDEO' && <div className="tpl-media">🎬 Video</div>}
@@ -46,8 +46,9 @@ export const blankForm = () => ({ name: '', language: 'en_US', category: 'UTILIT
 
 /** Full template builder with live preview. Reused by the admin (Template Master, Template Requests) and the client portal.
  *  submit(body) overrides the default POST/PUT to /templates; title/subtitle/submitLabel/note customise the header. */
-export function TemplateForm({ initial, editing, onDone, onCancel, submit, title, subtitle, submitLabel, note, extraActions }) {
+export function TemplateForm({ initial, editing, onDone, onCancel, submit, title, subtitle, submitLabel, note, extraActions, clients }) {
   const [f, setF] = useState(initial)
+  const [clientId, setClientId] = useState(editing?.client_id ? String(editing.client_id) : '')
   const [busy, setBusy] = useState(false); const toast = useToast()
   const n = countVars(f.body.text)
   const set = (patch) => setF({ ...f, ...patch })
@@ -55,7 +56,7 @@ export function TemplateForm({ initial, editing, onDone, onCancel, submit, title
   const setBtn = (i, patch) => set({ buttons: f.buttons.map((b, j) => (j === i ? { ...b, ...patch } : b)) })
   const save = async (e) => {
     e.preventDefault(); setBusy(true)
-    const body = { ...f, header: f.header.format === 'NONE' ? null : f.header, body: { text: f.body.text, examples: f.body.examples.slice(0, n) }, footer: f.footer || null }
+    const body = { ...f, header: f.header.format === 'NONE' ? null : f.header, body: { text: f.body.text, examples: f.body.examples.slice(0, n) }, footer: f.footer || null, ...(clients ? { client_id: clientId || null } : {}) }
     try { if (submit) await submit(body); else await api(editing ? `/templates/${editing.id}` : '/templates', { method: editing ? 'PUT' : 'POST', body }); onDone() }
     catch (e) { toast.error(e.message) } finally { setBusy(false) }
   }
@@ -72,6 +73,7 @@ export function TemplateForm({ initial, editing, onDone, onCancel, submit, title
             <Field label="Language"><select disabled={!!editing} value={f.language} onChange={(e) => set({ language: e.target.value })}>{LANGS.map((l) => <option key={l}>{l}</option>)}</select></Field>
             <Field label="Category"><select disabled={editing?.status === 'APPROVED'} value={f.category} onChange={(e) => set({ category: e.target.value })}><option>UTILITY</option><option>MARKETING</option><option>AUTHENTICATION</option></select></Field>
           </div>
+          {clients && <Field label="Client" icon={Briefcase} hint="Optional. The template appears in this client's portal once approved."><ClientSelect clients={clients} value={clientId} onChange={setClientId} placeholder="None / Internal" /></Field>}
           <div className="form-3">
             <Field label="Header"><select value={f.header.format} onChange={(e) => setH({ format: e.target.value })}>{['NONE', 'TEXT', 'IMAGE', 'DOCUMENT', 'VIDEO'].map((x) => <option key={x}>{x}</option>)}</select></Field>
             {f.header.format === 'TEXT' && <Field label="Header text" hint="Max 60, one {{1}}" className="span2"><input maxLength={60} value={f.header.text} onChange={(e) => setH({ text: e.target.value })} /></Field>}
@@ -102,7 +104,8 @@ export function TemplateForm({ initial, editing, onDone, onCancel, submit, title
 export function Templates() {
   const [clients, setClients] = useState([])
   useEffect(() => { api('/clients-list').then(setClients).catch(() => {}) }, [])
-  const [rows, setRows] = useState(null); const [flt, setFlt] = useState({ status: '', category: '', language: '', q: '' })
+  const [rows, setRows] = useState(null); const [flt, setFlt] = useState({ status: '', category: '', language: '', q: '', client_id: '' })
+  const [testing, setTesting] = useState(null)
   const [mode, setMode] = useState(null); const toast = useToast()
   const load = useCallback(() => { const qs = new URLSearchParams(Object.entries(flt).filter(([, v]) => v)).toString(); return api(`/templates?${qs}`).then(setRows).catch((e) => toast.error(e.message)) }, [flt]) // eslint-disable-line
   useEffect(() => { load() }, [load])
@@ -123,7 +126,7 @@ export function Templates() {
   const langs = useMemo(() => [...new Set(all.map((r) => r.language))], [rows]) // eslint-disable-line
   const counts = useMemo(() => all.reduce((a, t) => ({ ...a, [t.status]: (a[t.status] || 0) + 1 }), {}), [rows]) // eslint-disable-line
 
-  if (mode?.new || mode?.edit) return <TemplateForm initial={mode.edit ? toForm(mode.edit) : blankForm()} editing={mode.edit}
+  if (mode?.new || mode?.edit) return <TemplateForm clients={clients} initial={mode.edit ? toForm(mode.edit) : blankForm()} editing={mode.edit}
     onDone={() => { toast.success(mode.edit ? 'Edit submitted; template is back in review' : 'Template submitted to Meta for review'); setMode(null); load() }} onCancel={() => setMode(null)} />
 
   return (<div className="page">
@@ -135,6 +138,7 @@ export function Templates() {
     <div className={mode?.view ? 'grid-2-1' : ''}>
       <Card pad={false} title={<div className="filters">
         <div className="input-ico"><Search size={16} className="ico" /><input placeholder="Search name" value={flt.q} onChange={(e) => setFlt({ ...flt, q: e.target.value })} /></div>
+        <ClientSelect allowAll clients={clients} value={flt.client_id} onChange={(v) => setFlt({ ...flt, client_id: v })} />
         <select value={flt.category} onChange={(e) => setFlt({ ...flt, category: e.target.value })}><option value="">All categories</option><option>UTILITY</option><option>MARKETING</option><option>AUTHENTICATION</option></select>
         <select value={flt.language} onChange={(e) => setFlt({ ...flt, language: e.target.value })}><option value="">All languages</option>{langs.map((l) => <option key={l}>{l}</option>)}</select></div>}>
         <div className="table-wrap"><table className="table"><thead><tr><th>Template</th><th>Category</th><th>Status</th><th>Quality</th><th>Vars</th><th /></tr></thead>
@@ -144,12 +148,15 @@ export function Templates() {
             <td><Badge s={t.status} /></td><td>{t.quality_score ? <span className={`q ${t.quality_score.toLowerCase()}`}>● {t.quality_score}</span> : <span className="muted">—</span>}</td>
             <td>{t.body_variable_count}{t.header_format && t.header_format !== 'TEXT' ? ` + ${t.header_format.toLowerCase()}` : ''}{t.header_variable_count ? ' + hdr' : ''}</td>
             <td className="right nowrap" onClick={(e) => e.stopPropagation()}>
+              <span className="tip-wrap" data-tip={t.status === 'APPROVED' ? null : `Only APPROVED templates can be tested (this one is ${t.status})`}>
+                <Button size="sm" variant="ghost" icon={FlaskConical} disabled={t.status !== 'APPROVED'} title={t.status === 'APPROVED' ? 'Send a test with demo values' : undefined} onClick={() => setTesting(t)}>Test</Button></span>
               <Button size="sm" variant="ghost" icon={t.edit_check.allowed ? Pencil : Lock} title={t.edit_check.reason || 'Edit'} onClick={() => edit(t)} />
               <Button size="sm" variant="ghost-danger" icon={Trash2} onClick={() => del(t)} /></td></tr>)}</tbody>
             : <tbody><tr><td colSpan={6}><Empty icon={FileText} title="No templates">Click “Sync from Meta” or create a new one.</Empty></td></tr></tbody>}
         </table></div>
       </Card>
-      {mode?.view && <div className="sticky"><Card title={mode.view.name} icon={Eye} actions={<button className="icon-btn" onClick={() => setMode(null)}><X size={16} /></button>}>
+      {testing && <TestSendModal template={testing} onClose={() => setTesting(null)} />}
+    {mode?.view && <div className="sticky"><Card title={mode.view.name} icon={Eye} actions={<button className="icon-btn" onClick={() => setMode(null)}><X size={16} /></button>}>
         <div className="row wrap gap8"><Badge s={mode.view.status} /><UiBadge tone="orange">{mode.view.category}</UiBadge><UiBadge>{mode.view.language}</UiBadge>{mode.view.quality_score && <UiBadge>quality {mode.view.quality_score}</UiBadge>}</div>
         {mode.view.rejected_reason && <div className="alert error">Rejection reason: <b>{mode.view.rejected_reason}</b></div>}
         {!mode.view.edit_check.allowed && <div className="alert info"><Lock size={14} /> {mode.view.edit_check.reason}</div>}
@@ -197,4 +204,58 @@ export function TemplateSender({ numbers }) {
     </Card>
     <Card title="Preview" icon={Eye}>{form ? <Preview form={form} headerVal={hv || undefined} bodyVals={vals.length ? vals : undefined} buttonVals={bv} /> : <Empty icon={FileText} title="Pick a template">Its preview appears here.</Empty>}</Card>
   </div>)
+}
+
+/** "Test" a template: pick FROM (connected number) and TO, preview the auto-filled demo values, send via Meta.
+ *  base = '' (admin) or '/client' (client portal: own templates/numbers only). */
+export function TestSendModal({ template, onClose, base = '', numbersPath = '/phone-numbers' }) {
+  const toast = useToast()
+  const [info, setInfo] = useState(null); const [numbers, setNumbers] = useState(null)
+  const [from, setFrom] = useState(''); const [to, setTo] = useState('')
+  const [busy, setBusy] = useState(false); const [result, setResult] = useState(null)
+  useEffect(() => {
+    api(`${base}/templates/${template.id}/test`).then(setInfo).catch((e) => { toast.error(e.message); onClose() })
+    api(numbersPath).then((n) => { const list = (n.data || n).filter((x) => x.phone_number_id); setNumbers(list); if (list.length === 1) setFrom(String(list[0].id)) }).catch(() => setNumbers([]))
+  }, [template.id]) // eslint-disable-line
+  const send = async (e) => {
+    e.preventDefault(); setBusy(true); setResult(null)
+    try { const r = await api(`${base}/templates/${template.id}/test`, { method: 'POST', body: { phone_number_id: +from, to } }); setResult({ ok: true, ...r }); toast.success('Test message accepted by Meta') }
+    catch (err) { setResult({ ok: false, message: err.data?.message || err.message, code: err.data?.error_code, log_id: err.data?.log_id, meta: err.data?.meta, errors: err.data?.errors }) }
+    finally { setBusy(false) }
+  }
+  const p = info?.params
+  const form = toForm(template)
+  const bodyVals = p ? (Array.isArray(p.body) ? p.body : null) : null
+  const named = p && !Array.isArray(p.body) ? Object.entries(p.body) : null
+  const namedFill = (s) => named ? (s || '').replace(/\{\{\s*([a-z_][a-z0-9_]*)\s*\}\}/gi, (m, k) => p.body[k] ?? m) : s
+  const pform = named ? { ...form, body: { ...form.body, text: namedFill(form.body.text) }, header: { ...form.header, text: namedFill(form.header.text) } } : form
+  const rows = p ? [
+    ...(p.header ? [[`Header (${(info.template.header_format || 'text').toLowerCase()})`, p.header]] : []),
+    ...(named ? named.map(([k, v]) => [`Body {{${k}}}`, v]) : (bodyVals || []).map((v, i) => [`Body {{${i + 1}}}`, v])),
+    ...Object.entries(p.buttons || {}).map(([i, v]) => [`Button ${+i + 1} (${form.buttons[i]?.type?.toLowerCase().replace('_', ' ') || 'button'})`, v]),
+  ] : []
+  return (<Modal wide title={<span className="row gap8"><FlaskConical size={18} /> Test “{template.name}” <UiBadge>{template.language}</UiBadge></span>} onClose={onClose}
+    footer={<><Button onClick={onClose}>Close</Button><Button type="submit" form="tpl-test-form" variant="primary" icon={Send} loading={busy} disabled={!info?.can_send || !from || !to}>Send test</Button></>}>
+    {!info ? <div className="test-loading"><Spinner size={22} /></div> : <div className="test-grid">
+      <form id="tpl-test-form" className="form" onSubmit={send}>
+        <Field label="From number" icon={Phone} hint="Connected number from Number Master">{numbers === null ? <Spinner /> : numbers.length ? <select required value={from} onChange={(e) => setFrom(e.target.value)}>
+          <option value="">Select a number…</option>{numbers.map((n) => <option key={n.id} value={n.id}>{n.display_number}{n.name ? ` · ${n.name}` : ''}</option>)}</select>
+          : <div className="alert error">No connected numbers available.</div>}</Field>
+        <Field label="To number" icon={Hash} hint="With country code, e.g. +91 98765 43210"><input required inputMode="tel" placeholder="+91 98765 43210" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
+        <div><span className="field-label">Demo values that will be sent</span>
+          {rows.length ? <table className="table kv-table"><tbody>{rows.map(([k, v]) => <tr key={k}><td className="muted nowrap">{k}</td><td className="break">{/^https?:/.test(v) ? <a href={v} target="_blank" rel="noreferrer">{v}</a> : <code>{v}</code>}</td></tr>)}</tbody></table>
+            : <p className="muted small">This template has no variables; it is sent as-is.</p>}</div>
+        {info.error && <div className="alert error"><AlertCircle size={16} /> {info.error}</div>}
+        {!info.can_send && !info.error && <div className="alert info"><Lock size={14} /> Only APPROVED templates can be tested.</div>}
+        <p className="muted small">This sends a real WhatsApp message through Meta and is logged in Chat. Meta may charge for it like any template message.</p>
+        {result && (result.ok
+          ? <div className="alert success"><CheckCircle2 size={16} /><div><b>Accepted by Meta.</b> Message id: <code className="break">{result.wamid}</code><div className="small muted">Sent from {result.from} to +{result.to}. Delivery status will appear in Chat.</div></div></div>
+          : <div className="alert error"><AlertCircle size={16} /><div><b>Meta rejected the message{result.code ? ` (${result.code})` : ''}.</b><div className="break">{result.message}</div>
+            {result.meta?.error_user_msg && result.meta.error_user_msg !== result.message && <div className="small">{result.meta.error_user_msg}</div>}
+            {result.errors && <div className="small">{Object.values(result.errors).flat().join(' ')}</div>}
+            {result.log_id && <div className="small muted">Error log ref #{result.log_id}</div>}</div></div>)}
+      </form>
+      <div><span className="field-label">Preview</span><Preview form={pform} headerVal={p?.header} bodyVals={bodyVals || undefined} buttonVals={p?.buttons} /></div>
+    </div>}
+  </Modal>)
 }
