@@ -25,6 +25,7 @@ api/.phpunit.cache/
 # local mock state
 tools/mock-meta.log
 tools/mock-meta-templates.json
+tools/mock-meta-registered.json
 .DS_Store
 # generated on the server by .cpanel.yml from deploy/*.htaccess (kept untracked so cPanel's
 # "Update from Remote" never collides with the copies that already exist there)

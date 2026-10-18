@@ -12,8 +12,23 @@ class MetaApiException extends RuntimeException
         $msg = $error['error_user_msg'] ?? $error['message'] ?? ($body ? mb_substr($body, 0, 300) : 'Unknown error');
         $title = $error['error_user_title'] ?? null;
         $code = isset($error['code']) ? ' (#'.$error['code'].(isset($error['error_subcode']) ? '/'.$error['error_subcode'] : '').')' : '';
-        parent::__construct('Meta API error'.$code.': '.($title && ! str_contains($msg, $title) ? "$title – " : '').$msg, $httpStatus);
+        if (isset($error['code'])) $msg = preg_replace('/^\(#'.preg_quote((string) $error['code'], '/').'\)\s*/', '', $msg); // code is already in the prefix
+        $hint = self::HINTS[(int) ($error['code'] ?? 0)] ?? null;
+        parent::__construct('Meta API error'.$code.': '.($title && ! str_contains($msg, $title) ? "$title – " : '').$msg.($hint ? (preg_match('/[.!?]$/', trim($msg)) ? ' ' : '. ').$hint : ''), $httpStatus);
     }
+
+    /** What to do next, appended to the message the UI shows (Cloud API phone-number registration errors). */
+    public const HINTS = [
+        133010 => 'This number is not registered with the Cloud API yet. Go to Number Master and click Register.',
+        133005 => 'The PIN does not match this number\'s two-step verification PIN. Enter the existing PIN, or reset it in WhatsApp Manager → Phone numbers → Two-step verification.',
+        133006 => 'The phone number must be verified first (WhatsApp Manager → Phone numbers → verify by SMS/voice code), then click Register again.',
+        133008 => 'Too many PIN attempts. Wait for the time Meta mentions, then try again.',
+        133009 => 'PIN entered too quickly. Wait a moment, then try again.',
+        133015 => 'This number was recently deleted. Wait about 5 minutes, then try again.',
+        133016 => 'Too many register/deregister attempts for this number. Wait (up to 72 hours) before trying again.',
+    ];
+
+    public function hint(): ?string { return self::HINTS[$this->metaCode() ?? 0] ?? null; }
 
     public function metaCode(): ?int { return isset($this->error['code']) ? (int) $this->error['code'] : null; }
     public function metaSubcode(): ?int { return isset($this->error['error_subcode']) ? (int) $this->error['error_subcode'] : null; }
@@ -32,6 +47,6 @@ class MetaApiException extends RuntimeException
         return ['endpoint' => $this->method.' '.$this->endpoint, 'http_status' => $this->httpStatus, 'meta_code' => $this->metaCode(),
             'meta_subcode' => $this->metaSubcode(), 'meta_type' => $this->error['type'] ?? null, 'meta_message' => $this->error['message'] ?? null,
             'error_user_title' => $this->error['error_user_title'] ?? null, 'error_user_msg' => $this->error['error_user_msg'] ?? null,
-            'fbtrace_id' => $this->error['fbtrace_id'] ?? null];
+            'fbtrace_id' => $this->error['fbtrace_id'] ?? null, 'error_details' => $this->error['error_data']['details'] ?? null, 'hint' => $this->hint()];
     }
 }

@@ -37,17 +37,36 @@ class PhoneNumberController extends Controller
         try { $remote = $wa->listPhoneNumbers(); } catch (Throwable $e) { return $this->fail($e); }
         $waba = Setting::get('waba_id');
         foreach ($remote as $n) {
-            PhoneNumber::updateOrCreate(['phone_number_id' => $n['id']], [
-                'display_number' => $n['display_phone_number'] ?? $n['id'], 'name' => $n['verified_name'] ?? null,
-                'quality_rating' => $n['quality_rating'] ?? null, 'status' => $n['status'] ?? $n['code_verification_status'] ?? null, 'waba_id' => $waba,
-            ]);
+            $p = PhoneNumber::firstOrNew(['phone_number_id' => $n['id']]);
+            $p->fill(['display_number' => $n['display_phone_number'] ?? $p->display_number ?? $n['id'], 'waba_id' => $waba]);
+            if (! isset($n['status']) && isset($n['code_verification_status'])) $n['status'] = $n['code_verification_status'];
+            $p->applyMeta($n);
         }
         return ['synced' => count($remote), 'numbers' => PhoneNumber::with('client:id,name,company,is_active')->orderBy('id')->get()];
     }
+    /**
+     * POST /phone-numbers/{n}/register {pin}: POST /{phone-number-id}/register on Meta, then refresh the number's status.
+     * The PIN becomes (or must match) the number's two-step verification PIN. It is never stored or logged.
+     */
     public function register(Request $r, PhoneNumber $phoneNumber, WhatsAppService $wa)
     {
-        $d = $r->validate(['pin' => 'required|digits:6']);
-        try { return $wa->registerNumber($phoneNumber->phone_number_id, $d['pin']); }
+        abort_unless($r->user()?->is_admin, 403, 'Only admins can register numbers.');
+        $d = $r->validate(['pin' => ['required', 'string', 'regex:/^\d{6}$/']], ['pin.regex' => 'The PIN must be exactly 6 digits.']);
+        try { $res = $wa->registerNumber($phoneNumber->phone_number_id, $d['pin']); }
+        catch (Throwable $e) { return $this->fail($e, 502, ['registered' => false, 'number' => $phoneNumber->load('client:id,name,company,is_active')]); }
+        unset($d);
+        $refreshError = null;
+        try { $phoneNumber->applyMeta($wa->getPhoneNumber($phoneNumber->phone_number_id)); }
+        catch (Throwable $e) { $refreshError = $e->getMessage(); }
+        return ['registered' => (bool) ($res['success'] ?? true), 'message' => 'Number registered with the Cloud API.'.($refreshError ? ' (Status refresh failed: '.$refreshError.')' : ''),
+            'refresh_error' => $refreshError, 'number' => $phoneNumber->fresh()->load('client:id,name,company,is_active')];
+    }
+
+    /** POST /phone-numbers/{n}/refresh: re-fetch status/quality/name from Meta. */
+    public function refresh(PhoneNumber $phoneNumber, WhatsAppService $wa)
+    {
+        try { $m = $wa->getPhoneNumber($phoneNumber->phone_number_id); }
         catch (Throwable $e) { return $this->fail($e); }
+        return ['number' => $phoneNumber->applyMeta($m)->fresh()->load('client:id,name,company,is_active'), 'meta' => $m];
     }
 }

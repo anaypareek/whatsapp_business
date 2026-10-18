@@ -70,7 +70,7 @@ class WhatsAppPortalTest extends TestCase
         $this->auth()->postJson('/api/phone-numbers-sync')->assertOk()->assertJsonPath('synced', 2);
         $this->assertDatabaseHas('phone_numbers', ['phone_number_id' => '2222', 'name' => 'Oswal Support']);
         $p2 = PhoneNumber::where('phone_number_id', '2222')->first();
-        $this->auth()->postJson("/api/phone-numbers/{$p2->id}/register", ['pin' => '123456'])->assertOk()->assertJsonPath('success', true);
+        $this->auth()->postJson("/api/phone-numbers/{$p2->id}/register", ['pin' => '123456'])->assertOk()->assertJsonPath('registered', true);
         Http::assertSent(fn (HttpRequest $r) => str_contains($r->url(), '/2222/register') && $r['pin'] === '123456');
     }
 

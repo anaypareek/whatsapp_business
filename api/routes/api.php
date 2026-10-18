@@ -55,7 +55,8 @@ Route::middleware(['auth:sanctum', EnsureStaff::class])->group(function () {
 
     Route::apiResource('phone-numbers', Api\PhoneNumberController::class);
     Route::post('/phone-numbers-sync', [Api\PhoneNumberController::class, 'sync']);
-    Route::post('/phone-numbers/{phoneNumber}/register', [Api\PhoneNumberController::class, 'register']);
+    Route::post('/phone-numbers/{phoneNumber}/register', [Api\PhoneNumberController::class, 'register'])->middleware('throttle:10,1');
+    Route::post('/phone-numbers/{phoneNumber}/refresh', [Api\PhoneNumberController::class, 'refresh']);
 
     Route::apiResource('templates', Api\TemplateController::class);
     Route::get('/templates/{template}/test', [Api\TemplateController::class, 'testPreview']);

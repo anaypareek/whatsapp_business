@@ -409,9 +409,18 @@ i.snt{background:var(--p)}i.rcv{background:var(--blue)}
 .test-loading{display:flex;justify-content:center;padding:40px}
 .kv-table{margin-top:6px;border:1px solid var(--line2);border-radius:10px;overflow:hidden}.kv-table td{padding:8px 12px;font-size:13px}
 .kv-table code,.alert code{background:rgba(0,0,0,.05);padding:1px 6px;border-radius:5px;font-size:12.5px}
-.break{word-break:break-all}
+.break{overflow-wrap:anywhere}
 .alert.success,.alert.error:has(>svg){flex-direction:row;align-items:flex-start}.alert>svg{flex-shrink:0;margin-top:1px}
 .tip-wrap{position:relative;display:inline-block}
 .tip-wrap[data-tip]:hover::after{content:attr(data-tip);position:absolute;right:0;bottom:calc(100% + 6px);background:#1F1A17;color:#fff;font-size:12px;white-space:nowrap;padding:6px 10px;border-radius:7px;z-index:20;box-shadow:var(--sh-lg)}
 .tip-wrap .btn:disabled{pointer-events:none}
 .modal .card-body{max-height:calc(100vh - 170px);overflow:auto}
+/* number registration */
+.alert.warn{background:#FFFBEB;color:#92400E;border:1px solid #FDE68A;flex-direction:row;align-items:flex-start}.alert.warn>div{display:flex;flex-direction:column;gap:3px}
+.reg-banner{margin-bottom:18px;font-size:13.5px}
+.reg-facts{display:flex;gap:22px;flex-wrap:wrap;padding:12px 14px;background:#FCFBF9;border:1px solid var(--line2);border-radius:10px}.reg-facts small{display:block;color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
+.pin-wrap{position:relative;display:flex;align-items:center}.pin-wrap .icon-btn{position:absolute;right:6px}
+.pin-input{letter-spacing:.5em;font-size:20px;font-variant-numeric:tabular-nums;padding-right:44px !important;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.pin-input::placeholder{letter-spacing:.35em}
+.alert.info code,.alert.error code{background:rgba(0,0,0,.06);padding:1px 5px;border-radius:4px;font-size:12px}
+.msg-err{margin-top:6px;padding:6px 8px;border-radius:8px;background:#FEF2F2;color:#991B1B;font-size:12px;line-height:1.4;display:flex;gap:6px;align-items:flex-start}.msg-err svg{flex-shrink:0;margin-top:2px}

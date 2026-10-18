@@ -35,8 +35,24 @@ if (preg_match('#/messages$#', $path) && ($in['type'] ?? '') === 'interactive') 
     else $bad = 'unsupported interactive type';
     if ($bad) { http_response_code(400); echo json_encode(['error' => ['message' => "(#131009) Parameter value is not valid: $bad", 'code' => 131009]]); return; }
 }
+// Phone numbers: 100000000000001 is registered; 100000000000002 stays PENDING until POST /register (PIN 000000 = wrong PIN).
+$regFile = __DIR__.'/mock-meta-registered.json';
+$registered = is_file($regFile) ? json_decode(file_get_contents($regFile), true) : ['100000000000001' => true];
+$phones = ['100000000000001' => ['display_phone_number' => '+91 98765 43210', 'verified_name' => 'Fineoutput Demo'], '100000000000002' => ['display_phone_number' => '+91 88249 30146', 'verified_name' => 'Fineoutput Support']];
+$phoneInfo = fn ($id) => ['id' => $id] + $phones[$id] + (! empty($registered[$id])
+    ? ['quality_rating' => 'GREEN', 'status' => 'CONNECTED', 'platform_type' => 'CLOUD_API', 'name_status' => 'APPROVED', 'code_verification_status' => 'VERIFIED', 'account_mode' => 'LIVE', 'messaging_limit_tier' => 'TIER_1K']
+    : ['quality_rating' => 'UNKNOWN', 'status' => 'PENDING', 'platform_type' => 'NOT_APPLICABLE', 'name_status' => 'APPROVED', 'code_verification_status' => 'VERIFIED', 'account_mode' => 'LIVE']);
+if (preg_match('#/(\d{15})/messages$#', $path, $pm) && isset($phones[$pm[1]]) && empty($registered[$pm[1]])) {
+    http_response_code(400); echo json_encode(['error' => ['message' => '(#133010) Account not registered', 'type' => 'OAuthException', 'code' => 133010, 'fbtrace_id' => 'MOCK']]); return;
+}
+if (preg_match('#/(\d{15})/register$#', $path, $pm)) {
+    $pin = (json_decode(file_get_contents('php://input'), true) ?: [])['pin'] ?? '';
+    if ($pin === '000000') { http_response_code(400); echo json_encode(['error' => ['message' => '(#133005) Two step verification PIN Mismatch', 'type' => 'OAuthException', 'code' => 133005, 'fbtrace_id' => 'MOCK']]); return; }
+    $registered[$pm[1]] = true; file_put_contents($regFile, json_encode($registered)); echo json_encode(['success' => true]); return;
+}
+if (preg_match('#/(\d{15})$#', $path, $pm) && isset($phones[$pm[1]]) && $_SERVER['REQUEST_METHOD'] === 'GET') { echo json_encode($phoneInfo($pm[1])); return; }
 if (preg_match('#/messages$#', $path)) { $b = json_decode(file_get_contents('php://input'), true) ?: []; echo json_encode(['messaging_product' => 'whatsapp', 'contacts' => [['input' => $b['to'] ?? '', 'wa_id' => $b['to'] ?? '']], 'messages' => [['id' => 'wamid.MOCK'.bin2hex(random_bytes(6))]]]); }
 elseif (preg_match('#/media$#', $path)) echo json_encode(['id' => 'MOCKMEDIA'.rand(1000, 9999)]);
-elseif (preg_match('#/phone_numbers$#', $path)) echo json_encode(['data' => [['id' => '100000000000001', 'display_phone_number' => '+91 98765 43210', 'verified_name' => 'Fineoutput Demo', 'quality_rating' => 'GREEN', 'status' => 'CONNECTED']]]);
+elseif (preg_match('#/phone_numbers$#', $path)) echo json_encode(['data' => array_map($phoneInfo, array_keys($phones))]);
 elseif (preg_match('#/register$#', $path)) echo json_encode(['success' => true]);
 else { http_response_code(404); echo json_encode(['error' => ['message' => 'mock: unknown path']]); }

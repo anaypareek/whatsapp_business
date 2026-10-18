@@ -89,8 +89,16 @@ class WhatsAppService
         $wabaId ??= Setting::get('waba_id');
         if (! $wabaId) throw new RuntimeException('WABA ID is not configured (Settings).');
         return $this->check($this->client()->get($this->baseUrl()."/{$wabaId}/phone_numbers", [
-            'fields' => 'id,display_phone_number,verified_name,quality_rating,code_verification_status,status',
+            'fields' => self::PHONE_FIELDS,
         ]))['data'] ?? [];
+    }
+
+    public const PHONE_FIELDS = 'id,display_phone_number,verified_name,quality_rating,code_verification_status,status,name_status,platform_type,account_mode,messaging_limit_tier';
+
+    /** GET /{phone-number-id}: registration/quality/name status of one number. */
+    public function getPhoneNumber(string $phoneNumberId): array
+    {
+        return $this->check($this->client()->get($this->baseUrl()."/{$phoneNumberId}", ['fields' => self::PHONE_FIELDS]));
     }
 
     public function registerNumber(string $phoneNumberId, string $pin): array

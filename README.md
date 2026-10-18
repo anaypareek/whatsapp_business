@@ -159,3 +159,15 @@ Each error toast shows "(ref #ID)", which matches a row on this page. Entries ar
   - synced templates can be tagged from the template's side panel;
   - the list has a client filter at the top (All / Unassigned / each client).
 - Templates created by approving a client's template request are tagged with that client automatically. Tagged APPROVED templates appear in that client's portal.
+
+## Number Master: Register and Refresh status
+
+A number must be registered with the Cloud API before it can send. Until then, every send fails with `(#133010) Account not registered`.
+
+- **Register** (admins only) is highlighted on any number whose status isn't CONNECTED.
+  1. Enter a 6-digit PIN. If the number already has two-step verification, use that existing PIN; otherwise the PIN you choose becomes it.
+  2. The portal calls `POST /{phone-number-id}/register` with `{messaging_product: "whatsapp", pin}`.
+  3. It then re-reads the number from Meta (`GET /{phone-number-id}`): status, quality, verified name, name status, platform type, account mode and messaging tier.
+  4. The PIN is never stored or logged. Meta's errors are shown in the modal with a hint for the common codes (133005, 133006, 133008, 133009, 133015, 133016) and are saved in Error Logs.
+- **Refresh status** (↻) re-reads the same fields without registering.
+- Any send that fails with 133010 shows "Go to Number Master and click Register" in Send Message, the template Test modal and Chat.

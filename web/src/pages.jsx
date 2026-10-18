@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Users as UsersIcon, UserPlus, Trash2, Phone, Plus, RefreshCw, Pencil, ShieldCheck, Send, Paperclip, X, FileText, Image as ImageIcon, Search,
-  MessageSquarePlus, Check, CheckCheck, Clock, AlertCircle, Bot, Settings as SettingsIcon, KeyRound, Copy, Webhook, Lock, Hash, Building2, MessageCircle, Smile, Zap } from 'lucide-react'
+  MessageSquarePlus, Check, CheckCheck, Clock, AlertCircle, Bot, Settings as SettingsIcon, KeyRound, Copy, Webhook, Lock, Hash, Building2, MessageCircle, Smile, Zap, Eye, EyeOff, Info } from 'lucide-react'
 import { api, fmtTime, fmtShort } from './api'
 import { Button, Card, PageHeader, Field, TableSkeleton, Empty, Badge, Toggle, useToast, useLoad, Modal, Avatar, Skeleton } from './ui'
 import { TemplateSender } from './templates'
@@ -55,9 +55,23 @@ export function Numbers({ user }) {
   }
   const sync = async () => { try { const r = await api('/phone-numbers-sync', { method: 'POST' }); toast.success(`Synced ${r.synced} number(s) from Meta`); reload() } catch (e) { toast.error(e.message) } }
   const del = async (n) => { if (!confirm(`Delete ${n.display_number}?`)) return; try { await api(`/phone-numbers/${n.id}`, { method: 'DELETE' }); toast.success('Number deleted'); reload() } catch (e) { toast.error(e.message) } }
-  const register = async () => { try { await api(`/phone-numbers/${reg.id}/register`, { method: 'POST', body: { pin } }); toast.success('Number registered with Cloud API'); setReg(null); setPin('') } catch (e) { toast.error(e.message) } }
+  const [showPin, setShowPin] = useState(false); const [regBusy, setRegBusy] = useState(false); const [regErr, setRegErr] = useState(null); const [refreshing, setRefreshing] = useState(null)
+  const openReg = (n) => { setReg(n); setPin(''); setShowPin(false); setRegErr(null) }
+  const closeReg = () => { setReg(null); setPin(''); setRegErr(null) }
+  const register = async (e) => {
+    e?.preventDefault(); if (!/^\d{6}$/.test(pin)) return
+    setRegBusy(true); setRegErr(null)
+    try { const r = await api(`/phone-numbers/${reg.id}/register`, { method: 'POST', body: { pin } }); setPin(''); closeReg(); toast.success(`${r.message} Status: ${r.number?.status || 'unknown'}`); reload() }
+    catch (err) { setPin(''); setRegErr({ message: err.data?.message || err.message, hint: err.data?.meta?.hint, code: err.data?.error_code, log_id: err.data?.log_id }) }
+    finally { setRegBusy(false) }
+  }
+  const refresh = async (n) => { setRefreshing(n.id); try { const r = await api(`/phone-numbers/${n.id}/refresh`, { method: 'POST' }); toast.success(`${r.number.display_number}: ${r.number.status || 'status unknown'}${r.number.quality_rating ? ` · quality ${r.number.quality_rating}` : ''}`); reload() } catch (e) { toast.error(e.message) } finally { setRefreshing(null) } }
+  const pending = rows.filter((n) => n.status && n.status !== 'CONNECTED')
   return (<div className="page">
     <PageHeader icon={Phone} title="Number Master" subtitle="WhatsApp phone numbers linked to your WABA"><Button icon={RefreshCw} onClick={sync}>Sync from Meta</Button></PageHeader>
+    {pending.length > 0 && <div className="alert warn reg-banner"><AlertCircle size={18} /><div>
+      <b>{pending.length === 1 ? `${pending[0].display_number} is ${pending[0].status}` : `${pending.length} numbers are not connected`}: messages from {pending.length === 1 ? 'it' : 'them'} will fail with “(#133010) Account not registered”.</b>
+      <div>A number must be registered with the WhatsApp Cloud API before it can send. {user.is_admin ? <>Click <b>Register</b> on the number and enter a 6-digit PIN (the number's two-step verification PIN).</> : 'Ask an admin to register it.'} Use <b>Refresh status</b> to re-check with Meta.</div></div></div>}
     <div className="grid-form">
       <Card title={editId ? 'Edit number' : 'Add number'} icon={editId ? Pencil : Plus}>
         <form className="form" onSubmit={save}>
@@ -76,17 +90,32 @@ export function Numbers({ user }) {
             <td>{n.client ? <div className="client-cell"><b>{n.client.name}</b><small>{n.client.company || ''}{!n.client.is_active && ' · inactive'}</small></div> : <span className="muted">—</span>}</td>
             <td><code>{n.phone_number_id}</code></td>
             <td>{n.quality_rating ? <Badge tone={{ GREEN: 'green', YELLOW: 'amber', RED: 'red' }[n.quality_rating] || 'gray'}>{n.quality_rating}</Badge> : <span className="muted">—</span>}</td>
-            <td className="muted">{n.status || '—'}</td>
+            <td>{n.status ? <Badge tone={n.status === 'CONNECTED' ? 'green' : ['PENDING', 'UNVERIFIED', 'MIGRATED'].includes(n.status) ? 'amber' : ['BANNED', 'FLAGGED', 'RESTRICTED', 'DISCONNECTED', 'DELETED'].includes(n.status) ? 'red' : 'gray'}>{n.status}</Badge> : <span className="muted">—</span>}
+              {(n.platform_type || n.name_status) && <small className="block muted">{[n.platform_type && n.platform_type.replace(/_/g, ' ').toLowerCase(), n.name_status && `name ${n.name_status.replace(/_/g, ' ').toLowerCase()}`].filter(Boolean).join(' · ')}</small>}</td>
             <td className="right nowrap">
+              {user.is_admin && n.status !== 'CONNECTED' && <Button size="sm" variant="primary" icon={ShieldCheck} onClick={() => openReg(n)}>Register</Button>}
+              <Button size="sm" variant="ghost" icon={RefreshCw} loading={refreshing === n.id} title="Refresh status from Meta" onClick={() => refresh(n)} />
               <Button size="sm" variant="ghost" icon={Pencil} onClick={() => { setEditId(n.id); setF({ phone_number_id: n.phone_number_id, display_number: n.display_number, name: n.name || '', client_id: n.client_id ? String(n.client_id) : '' }) }} />
-              {user.is_admin && <Button size="sm" variant="ghost" icon={ShieldCheck} onClick={() => setReg(n)}>Register</Button>}
+              {user.is_admin && n.status === 'CONNECTED' && <Button size="sm" variant="ghost" icon={ShieldCheck} title="Register again (e.g. after a PIN change or migration)" onClick={() => openReg(n)} />}
               <Button size="sm" variant="ghost-danger" icon={Trash2} onClick={() => del(n)} /></td></tr>)}</tbody>
             : <tbody><tr><td colSpan={6}><Empty icon={Phone} title={cf ? 'No numbers for this filter' : 'No numbers yet'}>Add one manually or click “Sync from Meta”.</Empty></td></tr></tbody>}
         </table></div>
       </Card>
     </div>
-    {reg && <Modal title={`Register ${reg.display_number}`} onClose={() => setReg(null)} footer={<><Button onClick={() => setReg(null)}>Cancel</Button><Button variant="primary" icon={ShieldCheck} onClick={register} disabled={!/^\d{6}$/.test(pin)}>Register</Button></>}>
-      <Field label="6-digit two-step verification PIN" icon={Lock}><input inputMode="numeric" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} autoFocus /></Field>
+    {reg && <Modal title={`Register ${reg.display_number}`} onClose={closeReg} footer={<><Button onClick={closeReg}>Cancel</Button>
+      <Button type="submit" form="reg-form" variant="primary" icon={ShieldCheck} loading={regBusy} disabled={!/^\d{6}$/.test(pin)}>Register with Cloud API</Button></>}>
+      <form id="reg-form" className="form" onSubmit={register} autoComplete="off">
+        <div className="reg-facts"><div><small>Phone number ID</small><code>{reg.phone_number_id}</code></div><div><small>Current status</small><Badge tone={reg.status === 'CONNECTED' ? 'green' : 'amber'}>{reg.status || 'unknown'}</Badge></div>
+          {reg.waba_id && <div><small>WABA</small><code>{reg.waba_id}</code></div>}</div>
+        <Field label="6-digit PIN" icon={Lock} hint="Choose a 6-digit PIN. If this number already has two-step verification, enter that existing PIN.">
+          <div className="pin-wrap"><input className="pin-input" type={showPin ? 'text' : 'password'} inputMode="numeric" pattern="\d{6}" maxLength={6} autoComplete="new-password" placeholder="••••••"
+            value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} autoFocus aria-invalid={pin.length > 0 && pin.length < 6} />
+            <button type="button" className="icon-btn" title={showPin ? 'Hide PIN' : 'Show PIN'} onClick={() => setShowPin(!showPin)}>{showPin ? <EyeOff size={17} /> : <Eye size={17} />}</button></div>
+          {pin.length > 0 && pin.length < 6 && <small className="err-text">{6 - pin.length} more digit{6 - pin.length > 1 ? 's' : ''} needed</small>}</Field>
+        <div className="alert info"><Info size={15} /><div className="small">This calls Meta's <code>POST /{reg.phone_number_id}/register</code> and then refreshes the number's status. The PIN becomes the number's two-step verification PIN; it is not stored by this portal, so keep it somewhere safe.</div></div>
+        {regErr && <div className="alert error"><AlertCircle size={16} /><div><b>Meta refused the registration{regErr.code ? ` (${regErr.code})` : ''}.</b><div className="break">{regErr.message}</div>
+          {regErr.log_id && <div className="small muted">Error log ref #{regErr.log_id}</div>}</div></div>}
+      </form>
     </Modal>}
   </div>)
 }
@@ -159,7 +188,8 @@ function Bubble({ m }) {
     {m.direction === 'in' && m.media_id && !m.media_url && <div className="muted small">[{m.type}{m.filename ? `: ${m.filename}` : ''}]</div>}
     {media}{m.body && <div className="text">{m.body}</div>}
     <div className="meta">{m.source === 'auto_reply' && <span className="src"><Bot size={11} /> auto</span>}{m.source === 'api' && <span className="src">API</span>}
-      {fmtShort(m.created_at)}{m.direction === 'out' && <span className={`tick ${m.status}`} title={m.error || m.status}>{TICK[m.status]}</span>}</div>
+      {m.source === 'test' && <span className="src">test</span>}{fmtShort(m.created_at)}{m.direction === 'out' && <span className={`tick ${m.status}`} title={m.error || m.status}>{TICK[m.status]}</span>}</div>
+    {m.status === 'failed' && m.error && <div className="msg-err"><AlertCircle size={12} /> {m.error}</div>}
   </div></div>)
 }
 
