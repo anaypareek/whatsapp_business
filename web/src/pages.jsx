@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Users as UsersIcon, UserPlus, Trash2, Phone, Plus, RefreshCw, Pencil, ShieldCheck, Send, Paperclip, X, FileText, Image as ImageIcon, Search,
-  MessageSquarePlus, Check, CheckCheck, Clock, AlertCircle, Bot, Settings as SettingsIcon, KeyRound, Copy, Webhook, Lock, Hash, Building2, MessageCircle, Smile, Zap, Eye, EyeOff, Info } from 'lucide-react'
+  MessageSquarePlus, Check, CheckCheck, Clock, AlertCircle, Bot, Settings as SettingsIcon, KeyRound, Copy, Webhook, Lock, Hash, Building2, MessageCircle, Smile, Zap, Eye, EyeOff, Info, Bell } from 'lucide-react'
 import { api, fmtTime, fmtShort } from './api'
 import { Button, Card, PageHeader, Field, TableSkeleton, Empty, Badge, Toggle, useToast, useLoad, Modal, Avatar, Skeleton } from './ui'
 import { TemplateSender } from './templates'
@@ -342,7 +342,52 @@ export function Settings() {
             <p className="muted small">Graph API {s.graph_version}</p></Card>
         </div>
       </div>}
+    {s && <PushSettings />}
   </div>)
+}
+
+/** Admin → Settings → Push Notifications (Firebase): upload google-services.json + service-account key, send a test push. */
+function PushSettings() {
+  const toast = useToast()
+  const [p, setP] = useState(null); const [busy, setBusy] = useState(''); const [clients] = useLoad('/clients-list'); const [cid, setCid] = useState('')
+  const load = () => api('/push-settings').then(setP).catch((e) => toast.error(e.message))
+  useEffect(() => { load() }, []) // eslint-disable-line
+  const upload = async (kind, file) => {
+    if (!file) return; setBusy(kind)
+    const form = new FormData(); form.append('file', file)
+    try { setP(await api(`/push-settings/${kind}`, { method: 'POST', form })); toast.success(kind === 'client-config' ? 'google-services.json uploaded' : 'Service account key uploaded') }
+    catch (e) { toast.error(e.message) } finally { setBusy('') }
+  }
+  const remove = async (what) => { if (!confirm('Remove this file? Push notifications will stop.')) return; try { setP(await api('/push-settings', { method: 'DELETE', body: { what } })); toast.success('Removed') } catch (e) { toast.error(e.message) } }
+  const test = async () => { setBusy('test'); try { const r = await api('/push-settings/test', { method: 'POST', body: { client_id: +cid } }); toast.success(r.message) } catch (e) { toast.error(e.message) } finally { setBusy('') } }
+  const Pick = ({ kind, label }) => <label className={`btn btn-secondary btn-sm file-btn ${busy === kind ? 'loading' : ''}`}><input type="file" accept=".json,application/json" hidden onChange={(e) => { upload(kind, e.target.files[0]); e.target.value = '' }} />{busy === kind ? 'Uploading…' : label}</label>
+  if (!p) return <Card title="Push Notifications (Firebase)" icon={Bell}><Skeleton h={120} /></Card>
+  return (<Card title="Push Notifications (Firebase)" icon={Bell} className="push-card">
+    <p className="muted small">The Android app (<code>{p.package_name}</code>) gets its Firebase settings from the server at runtime, so no app rebuild is needed. Steps: <code>docs/FIREBASE-SETUP.md</code>.</p>
+    <div className="push-grid">
+      <div className={`push-item ${p.client_config.uploaded ? 'ok' : ''}`}>
+        <div className="row between"><b>1. google-services.json</b>{p.client_config.uploaded ? <Badge tone="green">uploaded</Badge> : <Badge tone="amber">missing</Badge>}</div>
+        <p className="muted small">From Firebase → Project settings → Your apps → Android app <code>{p.package_name}</code>. Public client settings only.</p>
+        {p.client_config.uploaded && <div className="small">Project <b>{p.client_config.project_id}</b> · sender {p.client_config.sender_id}<div className="muted break">{p.client_config.app_id}</div></div>}
+        <div className="row gap8"><Pick kind="client-config" label={p.client_config.uploaded ? 'Replace file' : 'Upload google-services.json'} />
+          {p.client_config.uploaded && <Button size="sm" variant="ghost-danger" icon={Trash2} onClick={() => remove('client_config')} />}</div>
+      </div>
+      <div className={`push-item ${p.service_account.uploaded ? 'ok' : ''}`}>
+        <div className="row between"><b>2. Service account key</b>{p.service_account.uploaded ? <Badge tone="green">uploaded</Badge> : <Badge tone="amber">missing</Badge>}</div>
+        <p className="muted small">Firebase → Project settings → Service accounts → Generate new private key. Stored encrypted on the server and never shown again.</p>
+        {p.service_account.uploaded && <div className="small">Project <b>{p.service_account.project_id}</b><div className="muted break">{p.service_account.client_email}</div>{p.service_account.source === 'env' && <div className="muted">Using FCM_CREDENTIALS_PATH from .env</div>}</div>}
+        <div className="row gap8"><Pick kind="service-account" label={p.service_account.uploaded ? 'Replace key' : 'Upload key (.json)'} />
+          {p.service_account.uploaded && p.service_account.source !== 'env' && <Button size="sm" variant="ghost-danger" icon={Trash2} onClick={() => remove('service_account')} />}</div>
+      </div>
+    </div>
+    {p.project_mismatch && <div className="alert error"><AlertCircle size={16} /> The two files are from different Firebase projects. Upload both from the same project.</div>}
+    <div className="push-test">
+      <span className={`dot ${p.enabled ? 'on' : ''}`} /><span><b>{p.enabled ? 'Push enabled' : 'Push disabled'}</b> · {p.devices} device{p.devices === 1 ? '' : 's'} registered ({p.clients_with_devices} client{p.clients_with_devices === 1 ? '' : 's'})</span>
+      <div className="grow" />
+      <div className="push-client"><ClientSelect clients={clients} value={cid} onChange={setCid} placeholder="Choose client…" /></div>
+      <Button icon={Send} variant="primary" disabled={!p.enabled || !cid} loading={busy === 'test'} onClick={test}>Send test push</Button>
+    </div>
+  </Card>)
 }
 
 // ---------------- API Keys ----------------

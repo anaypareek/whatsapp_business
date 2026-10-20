@@ -23,7 +23,8 @@ class ClientPortalController extends Controller
         if (! $c || ! Hash::check($d['password'], $c->password)) throw ValidationException::withMessages(['email' => 'Invalid credentials']);
         if (! $c->is_active) throw ValidationException::withMessages(['email' => 'Your account is inactive. Contact the administrator.']);
         $c->forceFill(['last_login_at' => now()])->save();
-        return ['token' => $c->createToken('client-portal')->plainTextToken, 'client' => $c];
+        $device = trim((string) $r->input('device_name', ''));
+        return ['token' => $c->createToken($device !== '' ? 'mobile:'.mb_substr($device, 0, 60) : 'client-portal')->plainTextToken, 'client' => $c];
     }
     public function me(Request $r) { return $r->user(); }
     public function logout(Request $r) { $r->user()->currentAccessToken()?->delete(); return ['ok' => true]; }

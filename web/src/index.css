@@ -424,3 +424,10 @@ i.snt{background:var(--p)}i.rcv{background:var(--blue)}
 .pin-input::placeholder{letter-spacing:.35em}
 .alert.info code,.alert.error code{background:rgba(0,0,0,.06);padding:1px 5px;border-radius:4px;font-size:12px}
 .msg-err{margin-top:6px;padding:6px 8px;border-radius:8px;background:#FEF2F2;color:#991B1B;font-size:12px;line-height:1.4;display:flex;gap:6px;align-items:flex-start}.msg-err svg{flex-shrink:0;margin-top:2px}
+/* push settings */
+.push-card{margin-top:20px}
+.push-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0}@media(max-width:900px){.push-grid{grid-template-columns:1fr}}
+.push-item{border:1px solid var(--line2);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px;background:#FCFBF9}.push-item.ok{background:#F7FDF9;border-color:#BBF7D0}
+.file-btn{cursor:pointer}.file-btn.loading{opacity:.6;pointer-events:none}
+.push-test{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--line2)}.push-client{min-width:240px}
+.push-test .dot{width:10px;height:10px;border-radius:50%;background:#D6D3D1}.push-test .dot.on{background:#22C55E;box-shadow:0 0 0 3px #DCFCE7}

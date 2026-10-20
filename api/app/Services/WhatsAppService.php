@@ -52,6 +52,15 @@ class WhatsAppService
         return $this->send($phoneNumberId, $to, 'interactive', $interactive);
     }
 
+    /** Download an incoming media object: GET /{media-id} → short-lived URL, then fetch it with the token. */
+    public function downloadMedia(string $mediaId): array
+    {
+        $info = $this->check($this->client()->get($this->baseUrl()."/{$mediaId}"));
+        $res = $this->client()->withHeaders(['Accept' => '*/*'])->get($info['url'] ?? '');
+        if (! $res->successful()) throw new RuntimeException('Media download failed: HTTP '.$res->status());
+        return ['body' => $res->body(), 'mime_type' => $info['mime_type'] ?? $res->header('Content-Type'), 'size' => $info['file_size'] ?? strlen($res->body())];
+    }
+
     protected function send(string $phoneNumberId, string $to, string $type, array $payload): array
     {
         return $this->check($this->client()->post($this->baseUrl()."/{$phoneNumberId}/messages", [

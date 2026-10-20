@@ -35,5 +35,7 @@ return [
         ],
     ],
 
+    // Push notifications for the mobile app (docs/FIREBASE-SETUP.md). Unset => push is silently disabled.
+    'fcm' => ['credentials_path' => env('FCM_CREDENTIALS_PATH'), 'project_id' => env('FCM_PROJECT_ID')],
     'whatsapp' => ['graph_version' => env('META_GRAPH_VERSION', 'v26.0'), 'graph_base' => env('META_GRAPH_BASE', 'https://graph.facebook.com')],
 ];

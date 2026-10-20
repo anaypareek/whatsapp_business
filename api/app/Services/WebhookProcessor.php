@@ -55,6 +55,7 @@ class WebhookProcessor
                         'created_at' => isset($m['timestamp']) ? Carbon::createFromTimestamp((int) $m['timestamp']) : now(),
                     ]);
                     $stats['messages']++;
+                    if ($phone?->client_id) \App\Jobs\SendIncomingMessagePush::dispatchAfterResponse($msg->id);
                     // automation flows take priority over simple auto-replies
                     if ($phone && $this->flows->handle($phone, $msg)) $stats['flows']++;
                     elseif ($phone && $body && $this->autoReply($phone, $msg)) $stats['auto_replies']++;

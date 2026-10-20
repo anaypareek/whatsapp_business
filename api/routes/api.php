@@ -18,7 +18,21 @@ Route::post('/v1/messages/send', Api\ExternalSendController::class)->middleware(
 
 // ---- Client portal ----
 Route::post('/client/auth/login', [Api\ClientPortalController::class, 'login'])->middleware('throttle:10,1');
+// Mobile app runtime config (public: Firebase *client* options only, never the service-account key)
+Route::get('/mobile/config', [Api\ClientChatController::class, 'mobileConfig'])->middleware('throttle:60,1');
+
 Route::middleware(['auth:sanctum', EnsureClient::class])->prefix('client')->group(function () {
+    // ---- mobile chat (docs/MOBILE.md) ----
+    Route::get('/chat/sync', [Api\ClientChatController::class, 'sync'])->middleware('throttle:chat-sync');
+    Route::middleware('throttle:chat')->group(function () {
+        Route::get('/chat/conversations', [Api\ClientChatController::class, 'conversations']);
+        Route::get('/chat/thread', [Api\ClientChatController::class, 'thread']);
+        Route::post('/chat/read', [Api\ClientChatController::class, 'read']);
+        Route::get('/chat/media/{message}', [Api\ClientChatController::class, 'media'])->whereNumber('message');
+        Route::post('/chat/send', [Api\ClientPortalController::class, 'send']);
+        Route::post('/devices', [Api\ClientChatController::class, 'registerDevice']);
+        Route::delete('/devices', [Api\ClientChatController::class, 'removeDevice']);
+    });
     Route::get('/auth/me', [Api\ClientPortalController::class, 'me']);
     Route::post('/auth/logout', [Api\ClientPortalController::class, 'logout']);
     Route::get('/dashboard', [Api\ClientPortalController::class, 'dashboard']);
@@ -83,6 +97,11 @@ Route::middleware(['auth:sanctum', EnsureStaff::class])->group(function () {
     Route::get('/clients-list', fn () => \App\Models\Client::orderBy('name')->get(['id', 'name', 'company', 'is_active']));
 
     Route::middleware(EnsureAdmin::class)->group(function () {
+        Route::get('/push-settings', [Api\PushSettingsController::class, 'show']);
+        Route::post('/push-settings/client-config', [Api\PushSettingsController::class, 'uploadClientConfig']);
+        Route::post('/push-settings/service-account', [Api\PushSettingsController::class, 'uploadServiceAccount']);
+        Route::delete('/push-settings', [Api\PushSettingsController::class, 'destroy']);
+        Route::post('/push-settings/test', [Api\PushSettingsController::class, 'test'])->middleware('throttle:10,1');
         Route::get('/error-logs/count', [Api\ErrorLogController::class, 'count']);
         Route::delete('/error-logs/clear', [Api\ErrorLogController::class, 'clear']);
         Route::get('/error-logs', [Api\ErrorLogController::class, 'index']);

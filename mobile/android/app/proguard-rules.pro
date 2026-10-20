@@ -1,0 +1,4 @@
+-keep class com.fineoutput.wabusiness.** { *; }
+-keep class com.dexterous.** { *; }
+-keepattributes *Annotation*
+-dontwarn com.google.android.play.core.**
