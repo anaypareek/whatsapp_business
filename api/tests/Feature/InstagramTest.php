@@ -42,6 +42,7 @@ class InstagramTest extends TestCase
         parent::setUp();
         Storage::fake('public');
         Cache::flush();
+        config(['services.instagram.frontend_url' => null, 'services.instagram.media_base_url' => null]);
         Setting::put('app_id', 'APPID'); Setting::put('app_secret', 'APPSECRET');
         $this->admin = User::create(['name' => 'Admin', 'email' => 'a@t.l', 'password' => 'password123', 'is_admin' => true]);
         $this->a = Client::create(['name' => 'Alpha', 'email' => 'alpha@c.t', 'password' => 'password123']);
@@ -503,6 +504,14 @@ class InstagramTest extends TestCase
         $this->assertSame('/17841400000000001/content_publishing_limit', $this->graph('GET', '#content_publishing_limit#')[0][1]);
         $this->assertSame('quota_usage,config', $this->graph('GET', '#content_publishing_limit#')[0][2]['fields']);
         $this->asClient($this->a)->getJson('/api/client/instagram/usage')->assertOk()->assertJsonCount(1, 'accounts');
+    }
+
+    public function test_usage_without_a_cached_or_refreshed_quota_falls_back_to_the_default_limit(): void
+    {
+        $r = $this->asAdmin()->getJson('/api/instagram/usage')->assertOk();   // never checked: no cached quota, no refresh
+        $this->assertNull($r->json('accounts.0.usage'));
+        $this->assertSame(100, $r->json('accounts.0.total'));
+        $this->assertSame(100, $r->json('daily_limit'));
     }
 
     // ======================================================================

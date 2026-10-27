@@ -128,7 +128,7 @@ class InstagramController extends Controller
     {
         $accounts = $this->scopedAccounts($r)->with('client')->orderBy('username')->get();
         $total = (int) config('services.instagram.daily_limit');
-        $rows = $accounts->map(function ($a) use ($r, $pub) {
+        $rows = $accounts->map(function ($a) use ($r, $pub, $total) {
             $q = $a->quota_usage !== null ? ['usage' => $a->quota_usage, 'total' => $a->quota_total ?: (int) config('services.instagram.daily_limit'), 'source' => 'cached'] : null;
             if ($r->boolean('refresh') && $a->isActive()) $q = $pub->quota($a, fresh: true);
             $a->refresh();

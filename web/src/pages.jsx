@@ -1,3 +1,4 @@
+import { InstagramSettings } from './instagram-settings'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Users as UsersIcon, UserPlus, Trash2, Phone, Plus, RefreshCw, Pencil, ShieldCheck, Send, Paperclip, X, FileText, Image as ImageIcon, Search,
   MessageSquarePlus, Check, CheckCheck, Clock, AlertCircle, Bot, Settings as SettingsIcon, KeyRound, Copy, Webhook, Lock, Hash, Building2, MessageCircle, Smile, Zap, Eye, EyeOff, Info, Bell } from 'lucide-react'
@@ -342,6 +343,7 @@ export function Settings() {
             <p className="muted small">Graph API {s.graph_version}</p></Card>
         </div>
       </div>}
+    {s && <InstagramSettings />}
     {s && <PushSettings />}
   </div>)
 }

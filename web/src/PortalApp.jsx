@@ -1,12 +1,13 @@
 // Client portal (served at /). Must not import or mention the admin path.
 import { useEffect, useRef, useState } from 'react'
-import { LayoutDashboard, MessagesSquare, Phone, FileText, LogOut, Menu, ChevronDown, Bell, MessageCircle, Send, Inbox, CheckCheck, PhoneCall, ClipboardList, Workflow, FlaskConical } from 'lucide-react'
+import { LayoutDashboard, MessagesSquare, Phone, FileText, LogOut, Menu, ChevronDown, Bell, MessageCircle, Send, Inbox, CheckCheck, PhoneCall, ClipboardList, Workflow, FlaskConical, Camera } from 'lucide-react'
 import { api, getToken, setToken, fmtTime } from './api'
 import { Spinner, Card, PageHeader, Skeleton, Empty, Badge, useLoad, TableSkeleton, Button } from './ui'
 import { TestSendModal } from './templates'
 import Login from './Login'
 import { Chat } from './pages'
 import { Flows } from './flows'
+import { Instagram } from './instagram'
 import { NumberRequestsPage, TemplateRequestsPage, StatsSection, TemplateDetail } from './portal-extra'
 
 const EP = { numbers: '/client/numbers', conversations: '/client/conversations', thread: '/client/messages/thread', poll: '/client/messages/poll', send: '/client/messages/send' }
@@ -58,7 +59,7 @@ function MyTemplates() {
     {testing && <TestSendModal template={testing} base="/client" numbersPath="/client/numbers" onClose={() => setTesting(null)} />}</div>)
 }
 
-const NAV = [['dashboard', 'Dashboard', LayoutDashboard], ['chats', 'Chats', MessagesSquare], ['numbers', 'My numbers', Phone], ['templates', 'My templates', FileText], ['flows', 'Automation flows', Workflow],
+const NAV = [['dashboard', 'Dashboard', LayoutDashboard], ['chats', 'Chats', MessagesSquare], ['numbers', 'My numbers', Phone], ['templates', 'My templates', FileText], ['flows', 'Automation flows', Workflow], ['instagram', 'Instagram', Camera],
   ['number-requests', 'Number requests', PhoneCall], ['template-requests', 'Template requests', ClipboardList]]
 const DETAIL = /^template-stats\/(\d+)$/
 
@@ -93,7 +94,7 @@ export default function PortalApp() {
         </div></div>
       </header>
       <main className={`main ${tab === 'chats' ? 'main-chat' : ''}`}>
-        {tab === 'dashboard' && <Home me={me} go={go} />}{tab === 'chats' && <Chat ep={EP} />}{tab === 'numbers' && <MyNumbers />}{tab === 'templates' && <MyTemplates />}{tab === 'flows' && <Flows scope="client" />}
+        {tab === 'dashboard' && <Home me={me} go={go} />}{tab === 'chats' && <Chat ep={EP} />}{tab === 'numbers' && <MyNumbers />}{tab === 'templates' && <MyTemplates />}{tab === 'flows' && <Flows scope="client" />}{tab === 'instagram' && <Instagram scope="client" />}
         {tab === 'number-requests' && <NumberRequestsPage />}{tab === 'template-requests' && <TemplateRequestsPage />}{DETAIL.test(tab) && <TemplateDetail key={tab} id={tab.match(DETAIL)[1]} go={go} />}
       </main>
     </div>
