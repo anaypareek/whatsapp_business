@@ -37,5 +37,14 @@ return [
 
     // Push notifications for the mobile app (docs/FIREBASE-SETUP.md). Unset => push is silently disabled.
     'fcm' => ['credentials_path' => env('FCM_CREDENTIALS_PATH'), 'project_id' => env('FCM_PROJECT_ID')],
+    // Instagram module (docs/INSTAGRAM.md). graph_base is shared with WhatsApp so one META_GRAPH_BASE points both at the local mock.
+    'instagram' => [
+        'graph_version' => env('META_GRAPH_VERSION', 'v26.0'),
+        'graph_base' => env('META_GRAPH_BASE', 'https://graph.facebook.com'),
+        'dialog_base' => env('META_DIALOG_BASE', 'https://www.facebook.com'),
+        'frontend_url' => env('IG_FRONTEND_URL'), // where the OAuth callback sends the browser back to (defaults to APP_URL)
+        'media_base_url' => env('IG_MEDIA_BASE_URL'),      // public origin Instagram downloads media from (default APP_URL)
+        'daily_limit' => (int) env('IG_DAILY_LIMIT', 100), // used only if Meta's content_publishing_limit doesn't say
+    ],
     'whatsapp' => ['graph_version' => env('META_GRAPH_VERSION', 'v26.0'), 'graph_base' => env('META_GRAPH_BASE', 'https://graph.facebook.com')],
 ];

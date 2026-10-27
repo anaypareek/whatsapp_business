@@ -14,6 +14,9 @@ Route::post('/webhook/whatsapp', [Api\WebhookController::class, 'receive']);
 // browser JS errors from both portals (public: errors can happen before/without login)
 Route::post('/client-errors', [Api\ErrorLogController::class, 'report'])->middleware('throttle:20,1');
 
+// Instagram OAuth redirect target (public; the one-time state in the cache says who is connecting)
+Route::get('/instagram/callback', [Api\InstagramController::class, 'callback'])->middleware('throttle:30,1');
+
 Route::post('/v1/messages/send', Api\ExternalSendController::class)->middleware([ApiKeyAuth::class, 'throttle:120,1']);
 
 // ---- Client portal ----
@@ -32,6 +35,26 @@ Route::middleware(['auth:sanctum', EnsureClient::class])->prefix('client')->grou
         Route::post('/chat/send', [Api\ClientPortalController::class, 'send']);
         Route::post('/devices', [Api\ClientChatController::class, 'registerDevice']);
         Route::delete('/devices', [Api\ClientChatController::class, 'removeDevice']);
+    });
+    Route::prefix('instagram')->group(function () {
+        Route::get('/config', [Api\InstagramController::class, 'config']);
+        Route::post('/connect/start', [Api\InstagramController::class, 'connectStart'])->middleware('throttle:20,1');
+        Route::get('/connect/{sid}', [Api\InstagramController::class, 'connectSession'])->where('sid', '[A-Za-z0-9]{32}');
+        Route::post('/connect/{sid}', [Api\InstagramController::class, 'connectSave'])->where('sid', '[A-Za-z0-9]{32}');
+        Route::get('/accounts', [Api\InstagramController::class, 'accounts']);
+        Route::post('/accounts/{id}/check', [Api\InstagramController::class, 'checkAccount'])->whereNumber('id')->middleware('throttle:30,1');
+        Route::delete('/accounts/{id}', [Api\InstagramController::class, 'disconnect'])->whereNumber('id');
+        Route::get('/usage', [Api\InstagramController::class, 'usage']);
+        Route::post('/media', [Api\InstagramController::class, 'upload'])->middleware('throttle:60,1');
+        Route::delete('/media/{id}', [Api\InstagramController::class, 'deleteMedia'])->whereNumber('id');
+        Route::get('/posts', [Api\InstagramController::class, 'posts']);
+        Route::post('/posts', [Api\InstagramController::class, 'storePost'])->middleware('throttle:60,1');
+        Route::get('/posts/{id}', [Api\InstagramController::class, 'showPost'])->whereNumber('id');
+        Route::put('/posts/{id}', [Api\InstagramController::class, 'updatePost'])->whereNumber('id');
+        Route::delete('/posts/{id}', [Api\InstagramController::class, 'destroyPost'])->whereNumber('id');
+        Route::post('/posts/{id}/cancel', [Api\InstagramController::class, 'cancelPost'])->whereNumber('id');
+        Route::post('/posts/{id}/retry', [Api\InstagramController::class, 'retryPost'])->whereNumber('id');
+        Route::post('/posts/{id}/publish-now', [Api\InstagramController::class, 'publishNowPost'])->whereNumber('id');
     });
     Route::get('/auth/me', [Api\ClientPortalController::class, 'me']);
     Route::post('/auth/logout', [Api\ClientPortalController::class, 'logout']);
@@ -97,6 +120,30 @@ Route::middleware(['auth:sanctum', EnsureStaff::class])->group(function () {
     Route::get('/clients-list', fn () => \App\Models\Client::orderBy('name')->get(['id', 'name', 'company', 'is_active']));
 
     Route::middleware(EnsureAdmin::class)->group(function () {
+        Route::prefix('instagram')->group(function () {
+        Route::get('/config', [Api\InstagramController::class, 'config']);
+        Route::post('/connect/start', [Api\InstagramController::class, 'connectStart'])->middleware('throttle:20,1');
+        Route::get('/connect/{sid}', [Api\InstagramController::class, 'connectSession'])->where('sid', '[A-Za-z0-9]{32}');
+        Route::post('/connect/{sid}', [Api\InstagramController::class, 'connectSave'])->where('sid', '[A-Za-z0-9]{32}');
+        Route::get('/accounts', [Api\InstagramController::class, 'accounts']);
+        Route::post('/accounts/{id}/check', [Api\InstagramController::class, 'checkAccount'])->whereNumber('id')->middleware('throttle:30,1');
+        Route::delete('/accounts/{id}', [Api\InstagramController::class, 'disconnect'])->whereNumber('id');
+        Route::get('/usage', [Api\InstagramController::class, 'usage']);
+        Route::post('/media', [Api\InstagramController::class, 'upload'])->middleware('throttle:60,1');
+        Route::delete('/media/{id}', [Api\InstagramController::class, 'deleteMedia'])->whereNumber('id');
+        Route::get('/posts', [Api\InstagramController::class, 'posts']);
+        Route::post('/posts', [Api\InstagramController::class, 'storePost'])->middleware('throttle:60,1');
+        Route::get('/posts/{id}', [Api\InstagramController::class, 'showPost'])->whereNumber('id');
+        Route::put('/posts/{id}', [Api\InstagramController::class, 'updatePost'])->whereNumber('id');
+        Route::delete('/posts/{id}', [Api\InstagramController::class, 'destroyPost'])->whereNumber('id');
+        Route::post('/posts/{id}/cancel', [Api\InstagramController::class, 'cancelPost'])->whereNumber('id');
+        Route::post('/posts/{id}/retry', [Api\InstagramController::class, 'retryPost'])->whereNumber('id');
+        Route::post('/posts/{id}/publish-now', [Api\InstagramController::class, 'publishNowPost'])->whereNumber('id');
+            Route::put('/accounts/{id}', [Api\InstagramController::class, 'updateAccount'])->whereNumber('id');
+            Route::get('/clients', [Api\InstagramController::class, 'clients']);
+            Route::get('/settings', [Api\InstagramSettingsController::class, 'show']);
+            Route::put('/settings', [Api\InstagramSettingsController::class, 'update']);
+        });
         Route::get('/push-settings', [Api\PushSettingsController::class, 'show']);
         Route::post('/push-settings/client-config', [Api\PushSettingsController::class, 'uploadClientConfig']);
         Route::post('/push-settings/service-account', [Api\PushSettingsController::class, 'uploadServiceAccount']);
