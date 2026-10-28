@@ -7,6 +7,8 @@ import '../store.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'thread.dart';
+import 'billing.dart';
+import 'requests.dart';
 
 class ConversationsScreen extends StatefulWidget {
   const ConversationsScreen({super.key, required this.s, required this.onLogout, this.now});
@@ -18,6 +20,7 @@ class ConversationsScreen extends StatefulWidget {
 class _ConversationsScreenState extends State<ConversationsScreen> {
   final _search = TextEditingController();
   bool _searching = false;
+  final _due = GlobalKey<DueChipState>();
   String _q = '';
 
   @override
@@ -25,10 +28,28 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
     super.initState();
     final st = widget.s.store;
     if (!st.loaded) st.loadConversations().catchError((_) {});
+    _loadPending();
   }
 
   Future<void> _refresh() async {
     try { await widget.s.store.loadConversations(); } on ApiException catch (e) { _snack(e.message); }
+  }
+
+  Future<void> _billing() async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => AppConfig.isAdmin
+        ? DuesScreen(api: widget.s.api) : BillingScreen(api: widget.s.api, path: '/client/billing')));
+    _due.currentState?.refresh();
+  }
+
+  int _pending = 0;
+  Future<void> _loadPending() async {
+    if (!AppConfig.isAdmin) return;
+    try { final r = await widget.s.api.get('/requests/pending-counts'); if (mounted) setState(() => _pending = ((r['numbers'] ?? 0) as num).toInt() + ((r['templates'] ?? 0) as num).toInt()); } catch (_) {}
+  }
+
+  Future<void> _requests() async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => RequestsScreen(api: widget.s.api)));
+    _loadPending();
   }
 
   void _snack(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
@@ -52,12 +73,18 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                     onChanged: (v) => setState(() => _q = v))
                 : const Text(AppConfig.appName),
             actions: [
+              if (!_searching) DueChip(key: _due, api: widget.s.api, path: AppConfig.isAdmin ? '/billing/summary' : '/client/billing/due',
+                  field: AppConfig.isAdmin ? 'total_due' : 'due', onTap: _billing),
+              if (!_searching && AppConfig.isAdmin) IconButton(key: const Key('requests'), tooltip: 'Requests', onPressed: _requests,
+                  icon: Badge(isLabelVisible: _pending > 0, label: Text('$_pending'), child: const Icon(Icons.inbox_outlined))),
               IconButton(key: const Key('search'), icon: Icon(_searching ? Icons.close : Icons.search), onPressed: () => setState(() {
                     _searching = !_searching;
                     if (!_searching) { _search.clear(); _q = ''; }
                   })),
               PopupMenuButton<String>(
                 onSelected: (v) async {
+                  if (v == 'billing') _billing();
+                  if (v == 'requests') _requests();
                   if (v == 'logout') {
                     final ok = await showDialog<bool>(context: context, builder: (c) => AlertDialog(title: const Text('Log out?'),
                         content: const Text('You will stop receiving notifications on this phone.'),
@@ -68,6 +95,8 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                 },
                 itemBuilder: (_) => [
                   PopupMenuItem(enabled: false, child: Text(widget.s.session.name.isEmpty ? 'Signed in' : widget.s.session.name, style: const TextStyle(fontWeight: FontWeight.w600, color: Brand.text))),
+                  if (AppConfig.isAdmin) const PopupMenuItem(value: 'requests', child: Row(children: [Icon(Icons.inbox_outlined, size: 20), SizedBox(width: 10), Text('Requests')])),
+                  PopupMenuItem(value: 'billing', child: Row(children: [const Icon(Icons.currency_rupee, size: 20), const SizedBox(width: 10), Text(AppConfig.isAdmin ? 'Client dues' : 'Usage & billing')])),
                   const PopupMenuItem(value: 'logout', child: Row(children: [Icon(Icons.logout, size: 20), SizedBox(width: 10), Text('Log out')])),
                 ],
               ),

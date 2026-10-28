@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'api.dart';
+import 'config.dart';
 import 'models.dart';
 
 class ThreadData {
@@ -47,7 +48,7 @@ class ChatStore extends ChangeNotifier {
 
   Future<void> loadConversations() async {
     try {
-      final r = await api.get('/client/chat/conversations');
+      final r = await api.get('${AppConfig.chatBase}/conversations');
       numbers = ((r['numbers'] as List?) ?? []).map((e) => WaNumber.fromJson(Map<String, dynamic>.from(e))).toList();
       _convs..clear()..addEntries(((r['conversations'] as List?) ?? []).map((e) {
           final c = Conversation.fromJson(Map<String, dynamic>.from(e));
@@ -127,7 +128,7 @@ class ChatStore extends ChangeNotifier {
     final parts = key.split('|');
     t.loading = true; t.error = null; notifyListeners();
     try {
-      final r = await api.get('/client/chat/thread', query: {'phone_number_id': parts[0], 'contact': parts[1], 'limit': '50'});
+      final r = await api.get('${AppConfig.chatBase}/thread', query: {'phone_number_id': parts[0], 'contact': parts[1], 'limit': '50'});
       final pending = t.messages.where((m) => m.id < 0).toList();
       t.messages..clear()..addAll(((r['messages'] as List?) ?? []).map((e) => Msg.fromJson(Map<String, dynamic>.from(e))))..addAll(pending);
       t.hasMore = r['has_more'] == true;
@@ -149,7 +150,7 @@ class ChatStore extends ChangeNotifier {
     final oldest = t.messages.firstWhere((m) => m.id > 0, orElse: () => t.messages.first);
     t.loading = true; notifyListeners();
     try {
-      final r = await api.get('/client/chat/thread', query: {'phone_number_id': parts[0], 'contact': parts[1], 'before_id': '${oldest.id}', 'limit': '50'});
+      final r = await api.get('${AppConfig.chatBase}/thread', query: {'phone_number_id': parts[0], 'contact': parts[1], 'before_id': '${oldest.id}', 'limit': '50'});
       final older = ((r['messages'] as List?) ?? []).map((e) => Msg.fromJson(Map<String, dynamic>.from(e))).where((m) => !t.messages.any((x) => x.id == m.id));
       t.messages.insertAll(0, older);
       t.hasMore = r['has_more'] == true;
@@ -163,7 +164,7 @@ class ChatStore extends ChangeNotifier {
   Future<void> markRead(int pn, String contact) async {
     final c = _convs[convKey(pn, contact)];
     if (c != null && c.unread > 0) { unreadTotal = (unreadTotal - c.unread).clamp(0, 1 << 30); c.unread = 0; notifyListeners(); }
-    try { await api.post('/client/chat/read', {'phone_number_id': pn, 'contact': contact}); } catch (_) {}
+    try { await api.post('${AppConfig.chatBase}/read', {'phone_number_id': pn, 'contact': contact}); } catch (_) {}
   }
 
   /// Sends text or a file. Shows an optimistic "pending" bubble, replaced by the server row (or marked failed).
@@ -178,7 +179,7 @@ class ChatStore extends ChangeNotifier {
     notifyListeners();
     try {
       final fields = {'phone_number_id': '$pn', 'to': contact, if (text != null && text.isNotEmpty) 'text': text};
-      final r = filePath == null ? await api.post('/client/chat/send', fields) : await api.multipart('/client/chat/send', fields, filePath: filePath);
+      final r = filePath == null ? await api.post(AppConfig.sendPath, fields) : await api.multipart(AppConfig.sendPath, fields, filePath: filePath);
       final m = Msg.fromJson(Map<String, dynamic>.from(r));
       _replaceLocal(t, local.id, m);
       return null;

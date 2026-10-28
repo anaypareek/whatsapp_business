@@ -100,6 +100,14 @@ class TemplateController extends Controller
         return $template->load('client:id,name,company');
     }
 
+    /** POST /templates-assign {ids:[…], client_id|null}: bulk (un)assign existing templates. */
+    public function bulkAssign(Request $r)
+    {
+        $d = $r->validate(['ids' => 'required|array|min:1|max:500', 'ids.*' => 'integer', 'client_id' => 'nullable|exists:clients,id']);
+        $n = MessageTemplate::whereIn('id', $d['ids'])->update(['client_id' => $d['client_id'] ?? null]);
+        return ['updated' => $n, 'templates' => MessageTemplate::with('client:id,name,company')->whereIn('id', $d['ids'])->get()];
+    }
+
     public function sync(WhatsAppService $wa)
     {
         try { $remote = $wa->listTemplates(); } catch (Throwable $e) { return $this->fail($e); }

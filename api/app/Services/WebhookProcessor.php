@@ -55,7 +55,7 @@ class WebhookProcessor
                         'created_at' => isset($m['timestamp']) ? Carbon::createFromTimestamp((int) $m['timestamp']) : now(),
                     ]);
                     $stats['messages']++;
-                    if ($phone?->client_id) \App\Jobs\SendIncomingMessagePush::dispatchAfterResponse($msg->id);
+                    if ($phone) \App\Jobs\SendIncomingMessagePush::dispatchAfterResponse($msg->id); // client phones + Master app
                     // automation flows take priority over simple auto-replies
                     if ($phone && $this->flows->handle($phone, $msg)) $stats['flows']++;
                     elseif ($phone && $body && $this->autoReply($phone, $msg)) $stats['auto_replies']++;
@@ -64,16 +64,22 @@ class WebhookProcessor
                     $orig = Message::where('wamid', $s['id'])->first();
                     MessageStatus::create([
                         'message_id' => $orig?->id, 'wamid' => $s['id'], 'status' => $s['status'],
-                        'recipient_id' => $s['recipient_id'] ?? null,
+                        'recipient_id' => $s['recipient_id'] ?? null, 'pricing_category' => isset($s['pricing']['category']) ? substr((string) $s['pricing']['category'], 0, 32) : null,
                         'status_at' => isset($s['timestamp']) ? Carbon::createFromTimestamp((int) $s['timestamp']) : now(), 'raw' => $s,
                     ]);
+                    if ($orig && isset($s['pricing']['category'])) {
+                        // Meta's billing category (marketing/utility/authentication/service…) — used by BillingService when present
+                        $orig->pricing_category = substr((string) $s['pricing']['category'], 0, 32);
+                        if (isset($s['pricing']['billable'])) $orig->billable = (bool) $s['pricing']['billable'];
+                        if (! empty($s['conversation']['id'])) $orig->conversation_id = substr((string) $s['conversation']['id'], 0, 64);
+                    }
                     if ($orig) {
                         $rank = ['pending' => 0, 'failed' => 0, 'sent' => 1, 'delivered' => 2, 'read' => 3];
                         if ($s['status'] === 'failed' || ($rank[$s['status']] ?? 0) > ($rank[$orig->status] ?? 0)) {
                             $orig->status = $s['status'];
                             if ($s['status'] === 'failed') $orig->error = $s['errors'][0]['title'] ?? $s['errors'][0]['message'] ?? 'failed';
-                            $orig->save();
                         }
+                        if ($orig->isDirty()) $orig->save();
                     }
                     $stats['statuses']++;
                 }

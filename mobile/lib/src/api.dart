@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'config.dart';
 
 class ApiException implements Exception {
   final int status; final String message; final String? code; final Duration? retryAfter;
@@ -27,7 +28,7 @@ class Api {
 
   Map<String, String> get authHeaders => {'Accept': 'application/json', if (token != null) 'Authorization': 'Bearer $token'};
   Uri uri(String path, [Map<String, String>? q]) => Uri.parse('$base/api$path').replace(queryParameters: (q == null || q.isEmpty) ? null : q);
-  String mediaUrl(int messageId) => '$base/api/client/chat/media/$messageId';
+  String mediaUrl(int messageId) => '$base/api${AppConfig.chatBase}/media/$messageId';
 
   Future<dynamic> get(String path, {Map<String, String>? query}) => _send(() => _http.get(uri(path, query), headers: authHeaders));
   Future<dynamic> post(String path, [Map<String, dynamic>? body]) => _send(() => _http.post(uri(path),
@@ -43,7 +44,7 @@ class Api {
 
   /// The cheap poll. Sends If-None-Match so an unchanged inbox costs one cached lookup and a 304.
   Future<SyncResponse> sync(String? since, String? etag) async {
-    final res = await _raw(() => _http.get(uri('/client/chat/sync', {if (since != null) 'since': since}),
+    final res = await _raw(() => _http.get(uri('${AppConfig.chatBase}/sync', {if (since != null) 'since': since}),
         headers: {...authHeaders, if (etag != null) 'If-None-Match': etag}));
     if (res.statusCode == 304) return SyncResponse(notModified: true, etag: etag);
     final body = _decode(res);

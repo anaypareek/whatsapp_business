@@ -85,6 +85,8 @@ Route::middleware(['auth:sanctum', EnsureClient::class])->prefix('client')->grou
     Route::post('/flows/{flow}/duplicate', [Api\FlowController::class, 'duplicate'])->whereNumber('flow');
     Route::get('/flows/{flow}/stats', [Api\FlowController::class, 'stats'])->whereNumber('flow');
     Route::get('/stats', [Api\ClientPortalController::class, 'stats']);
+    Route::get('/billing', [Api\BillingController::class, 'mine']);
+    Route::get('/billing/due', [Api\BillingController::class, 'myDue']);
     Route::get('/stats/templates/{template}', [Api\ClientPortalController::class, 'templateSends'])->whereNumber('template');
     Route::get('/api-keys/logs', [Api\ApiKeyController::class, 'logs']);
     Route::apiResource('api-keys', Api\ApiKeyController::class)->only(['index', 'store', 'update', 'destroy'])->parameters(['api-keys' => 'apiKey']);
@@ -125,6 +127,21 @@ Route::middleware(['auth:sanctum', EnsureStaff::class])->group(function () {
     Route::apiResource('auto-replies', Api\AutoReplyRuleController::class)->except('show')->parameters(['auto-replies' => 'autoReply']);
 
     Route::put('/templates/{template}/client', [Api\TemplateController::class, 'assignClient']);
+    Route::post('/templates-assign', [Api\TemplateController::class, 'bulkAssign']);
+    Route::put('/phone-numbers/{phoneNumber}/client', [Api\PhoneNumberController::class, 'assignClient']);
+
+    // WA Fineoutput Master app: chat across all numbers (+ staff push devices)
+    Route::prefix('admin')->group(function () {
+        Route::get('/chat/sync', [Api\AdminChatController::class, 'sync'])->middleware('throttle:chat-sync');
+        Route::middleware('throttle:chat')->group(function () {
+            Route::get('/chat/conversations', [Api\AdminChatController::class, 'conversations']);
+            Route::get('/chat/thread', [Api\AdminChatController::class, 'thread']);
+            Route::post('/chat/read', [Api\AdminChatController::class, 'read']);
+            Route::get('/chat/media/{message}', [Api\AdminChatController::class, 'media'])->whereNumber('message');
+            Route::post('/devices', [Api\AdminChatController::class, 'registerDevice']);
+            Route::delete('/devices', [Api\AdminChatController::class, 'removeDevice']);
+        });
+    });
     Route::get('/clients-list', fn () => \App\Models\Client::orderBy('name')->get(['id', 'name', 'company', 'is_active']));
 
     Route::middleware(EnsureAdmin::class)->group(function () {
@@ -163,6 +180,11 @@ Route::middleware(['auth:sanctum', EnsureStaff::class])->group(function () {
         Route::get('/error-logs/{errorLog}', [Api\ErrorLogController::class, 'show']);
         Route::post('/error-logs/{errorLog}/resolve', [Api\ErrorLogController::class, 'resolve']);
         Route::apiResource('clients', Api\ClientController::class);
+        Route::get('/billing/summary', [Api\BillingController::class, 'summary']);
+        Route::put('/billing/default-rates', [Api\BillingController::class, 'updateDefaultRates']);
+        Route::get('/billing/clients/{client}', [Api\BillingController::class, 'show']);
+        Route::put('/billing/clients/{client}/rates', [Api\BillingController::class, 'updateRates']);
+        Route::post('/billing/clients/{client}/payments', [Api\BillingController::class, 'storePayment']);
         Route::get('/requests/pending-counts', fn () => ['numbers' => \App\Models\PhoneNumberRequest::where('status', 'pending')->count(),
             'templates' => \App\Models\TemplateRequest::where('status', 'pending')->count()]);
         Route::get('/number-requests', [Api\NumberRequestController::class, 'index']);

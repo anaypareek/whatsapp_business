@@ -96,14 +96,14 @@ class PushService {
     } catch (e) { debugPrint('push: register failed $e'); }
   }
 
-  Future<void> _send(String t) => api.post('/client/devices', {'token': t, 'platform': 'android', 'app_version': AppConfig.version}).catchError((_) => null);
+  Future<void> _send(String t) => api.post(AppConfig.devicesPath, {'token': t, 'platform': 'android', 'app_version': AppConfig.version}).catchError((_) => null);
 
   /// On logout (token still valid): remove this device on the server and drop the FCM token.
   Future<void> unregister() async {
     if (!available) return;
     try {
       final t = _token ?? await FirebaseMessaging.instance.getToken();
-      if (t != null) await api.delete('/client/devices', {'token': t});
+      if (t != null) await api.delete(AppConfig.devicesPath, {'token': t});
       await FirebaseMessaging.instance.deleteToken();
       _token = null;
       await _local.cancelAll();

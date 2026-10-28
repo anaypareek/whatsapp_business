@@ -15,6 +15,7 @@ class Message extends Model
             if (! $m->phone_number_id) return;
             $client = \Illuminate\Support\Facades\Cache::remember("chat:pnclient:{$m->phone_number_id}", 300, fn () => (int) PhoneNumber::whereKey($m->phone_number_id)->value('client_id'));
             if ($client) \App\Http\Controllers\Api\ClientChatController::bust($client);
+            \App\Http\Controllers\Api\ClientChatController::bust('admin'); // Master app (all numbers)
         });
     }
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { LayoutDashboard, MessagesSquare, Send, FileText, Phone, Bot, Users as UsersIcon, KeyRound, Settings as SettingsIcon, LogOut, Menu, ChevronDown, Bell, MessageCircle, Briefcase, PhoneCall, ClipboardList, Workflow, Bug, Camera } from 'lucide-react'
+import { LayoutDashboard, MessagesSquare, Send, FileText, Phone, Bot, Users as UsersIcon, KeyRound, Settings as SettingsIcon, LogOut, Menu, ChevronDown, Bell, MessageCircle, Briefcase, PhoneCall, ClipboardList, Workflow, Bug, Camera, Wallet } from 'lucide-react'
 import { api, getToken, setToken } from './api'
 import { Spinner } from './ui'
 import { ADMIN_BASE } from './config'
@@ -13,14 +13,15 @@ import { ErrorLogs } from './errorlogs'
 import { Instagram } from './instagram'
 import { Users, Numbers, SendMessage, Chat, AutoReplies, Settings } from './pages'
 import { ApiKeysPage } from './apikeys'
+import { Dues, DueBadge } from './billing'
 
 const NAV = [
   { group: 'Overview', items: [['dashboard', 'Dashboard', LayoutDashboard]] },
   { group: 'Messaging', items: [['chat', 'Chat Master', MessagesSquare], ['send', 'Send Message', Send], ['templates', 'Template Master', FileText], ['flows', 'Automation Flows', Workflow], ['instagram', 'Instagram', Camera], ['rules', 'Auto-replies', Bot]] },
   { group: 'Requests', items: [['number-requests', 'Number Requests', PhoneCall, true], ['template-requests', 'Template Requests', ClipboardList, true]] },
-  { group: 'Setup', items: [['clients', 'Clients', Briefcase, true], ['numbers', 'Number Master', Phone], ['users', 'Users', UsersIcon, true], ['keys', 'API Keys', KeyRound, true], ['settings', 'Settings', SettingsIcon, true], ['error-logs', 'Error Logs', Bug, true]] },
+  { group: 'Setup', items: [['clients', 'Clients', Briefcase, true], ['dues', 'Client Dues', Wallet, true], ['numbers', 'Number Master', Phone], ['users', 'Users', UsersIcon, true], ['keys', 'API Keys', KeyRound, true], ['settings', 'Settings', SettingsIcon, true], ['error-logs', 'Error Logs', Bug, true]] },
 ]
-const PAGES = { 'error-logs': ErrorLogs, flows: () => <Flows scope="admin" />, instagram: () => <Instagram scope="admin" />, 'number-requests': NumberRequests, 'template-requests': TemplateRequests, clients: Clients, dashboard: Dashboard, chat: Chat, send: SendMessage, templates: Templates, numbers: Numbers, rules: AutoReplies, users: Users, keys: () => <ApiKeysPage scope="admin" />, settings: Settings }
+const PAGES = { dues: Dues, 'error-logs': ErrorLogs, flows: () => <Flows scope="admin" />, instagram: () => <Instagram scope="admin" />, 'number-requests': NumberRequests, 'template-requests': TemplateRequests, clients: Clients, dashboard: Dashboard, chat: Chat, send: SendMessage, templates: Templates, numbers: Numbers, rules: AutoReplies, users: Users, keys: () => <ApiKeysPage scope="admin" />, settings: Settings }
 const TITLES = Object.fromEntries(NAV.flatMap((g) => g.items.map(([k, l]) => [k, l])))
 
 export default function App() {
@@ -80,6 +81,7 @@ export default function App() {
           <button className="icon-btn burger" onClick={() => setNavOpen(true)}><Menu size={20} /></button>
           <div className="crumb"><span>Portal</span> / <b>{TITLES[tab]}</b></div>
           <div className="topbar-right">
+            {user.is_admin && <DueBadge scope="admin" onClick={() => go('dues')} />}
             <button className="icon-btn bell" title="Unread messages" onClick={() => go('chat')}><Bell size={19} />{unread > 0 && <i>{unread > 99 ? '99+' : unread}</i>}</button>
             <div className="user-menu" ref={menuRef}>
               <button className="user-btn" onClick={() => setMenu(!menu)}>

@@ -531,3 +531,30 @@ i.snt{background:var(--p)}i.rcv{background:var(--blue)}
 .code-copy{position:absolute;top:8px;right:8px;z-index:1}
 tr.dim td{opacity:.55}
 .waba-banner{border-left:5px solid #DC2626;margin-bottom:16px}.waba-banner ul{margin:6px 0;padding-left:18px}.waba-banner li{margin:4px 0}
+/* ---- assign + bulk ---- */
+.bulk-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--p50);border-bottom:1px solid var(--line);font-weight:600;flex-wrap:wrap}
+.bulk-bar .grow{flex:1}
+.chk{width:16px;height:16px;accent-color:var(--p);cursor:pointer;vertical-align:middle}
+.table tr.checked td{background:var(--p50)}
+.client-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:12px;font-weight:600;white-space:nowrap}
+.client-chip.none{background:#f3f4f6;color:var(--muted);font-weight:500}
+.link-btn{border:0;background:none;padding:0 2px;color:var(--p2);font:inherit;font-size:12px;font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.link-btn:hover{color:var(--p)}
+/* ---- billing ---- */
+.due-badge{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 13px;font:inherit;font-size:13px;cursor:pointer;color:var(--text,#111)}
+.due-badge.owing{border-color:#fecaca;background:#fef2f2;color:#b91c1c}.due-badge.clear{border-color:#bbf7d0;background:#f0fdf4;color:#15803d}
+.due-badge:hover{filter:brightness(.97)}.due-badge b{font-weight:800}
+@media (max-width:700px){.due-badge .due-l{display:none}}
+.bal-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:18px}
+.bal{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px}.bal small{display:block;color:var(--muted);font-weight:600}
+.bal b{display:block;font-size:24px;margin-top:6px}.bal.due.owing{background:#fef2f2;border-color:#fecaca}.bal.due.owing b{color:#b91c1c}
+.paid{color:#15803d}.grand{font-size:16px}
+.table.bill tfoot td{border-top:2px solid var(--line);background:#fafafa}
+.cat-cell{display:flex;align-items:center;gap:8px}.cat-ico{width:26px;height:26px;border-radius:8px;display:grid;place-items:center}
+.c-marketing{background:#ffedd5;color:#c2410c}.c-utility{background:#dbeafe;color:#1d4ed8}.c-authentication{background:#ede9fe;color:#6d28d9}.c-service{background:#dcfce7;color:#15803d}
+.period{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.period input[type=date]{border:1px solid var(--line);border-radius:9px;padding:6px 8px;font:inherit;font-size:13px}
+.period .seg button{padding:6px 10px;font-size:12px}
+.bill-foot{padding:12px 16px;border-top:1px solid var(--line)}
+.rate-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;margin-bottom:12px}
+.period{flex-wrap:nowrap}.period input[type=date]{width:auto;min-width:0;flex:0 0 auto}
+@media (max-width:760px){.period{flex-wrap:wrap}}

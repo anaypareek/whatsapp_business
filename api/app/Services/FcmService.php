@@ -97,7 +97,20 @@ class FcmService
             if (! Cache::has('fcm:warned')) { Log::warning('FCM push skipped: no Firebase service account uploaded (Admin → Settings → Push Notifications, see docs/FIREBASE-SETUP.md).'); Cache::put('fcm:warned', 1, 3600); }
             return $out + ['skipped' => true];
         }
-        $tokens = DeviceToken::where('client_id', $clientId)->get();
+        return $this->sendToTokens(DeviceToken::where('client_id', $clientId)->get(), $title, $body, $data, $collapseKey, ['client_id' => $clientId]);
+    }
+
+    /** Send to every staff phone (WA Fineoutput Master app). */
+    public function sendToStaff(string $title, string $body, array $data = [], ?string $collapseKey = null): array
+    {
+        if (! $this->enabled()) return ['sent' => 0, 'removed' => 0, 'failed' => 0, 'skipped' => true];
+        return $this->sendToTokens(\App\Models\UserDeviceToken::all(), $title, $body, $data, $collapseKey, ['staff' => true]);
+    }
+
+    /** @param \Illuminate\Support\Collection $tokens DeviceToken|UserDeviceToken models (invalid ones are deleted). */
+    protected function sendToTokens($tokens, string $title, string $body, array $data, ?string $collapseKey, array $ctx): array
+    {
+        $out = ['sent' => 0, 'removed' => 0, 'failed' => 0];
         if ($tokens->isEmpty()) return $out;
         try { $access = $this->accessToken(); } catch (Throwable $e) { ErrorLogger::exception($e, 'warning'); return $out + ['failed' => $tokens->count()]; }
         $url = 'https://fcm.googleapis.com/v1/projects/'.$this->projectId().'/messages:send';
@@ -121,7 +134,7 @@ class FcmService
             } else {
                 $out['failed']++;
                 ErrorLogger::record(['level' => 'warning', 'source' => 'app', 'message' => 'FCM send failed: HTTP '.$res->status().' '.($res->json('error.message') ?? ''),
-                    'error_code' => 'FCM_'.($status ?? $res->status()), 'status_code' => $res->status(), 'context' => ['client_id' => $clientId, 'device_token_id' => $t->id, 'codes' => $codes]]);
+                    'error_code' => 'FCM_'.($status ?? $res->status()), 'status_code' => $res->status(), 'context' => $ctx + ['device_token_id' => $t->id, 'codes' => $codes]]);
             }
         }
         return $out;

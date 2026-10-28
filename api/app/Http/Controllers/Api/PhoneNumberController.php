@@ -30,6 +30,13 @@ class PhoneNumberController extends Controller
         $phoneNumber->update($d);
         return $phoneNumber->load('client:id,name,company,is_active');
     }
+    /** PUT /phone-numbers/{n}/client {client_id|null}: all past + future chats of the number follow it to the client. */
+    public function assignClient(Request $r, PhoneNumber $phoneNumber)
+    {
+        $d = $r->validate(['client_id' => 'nullable|exists:clients,id']);
+        $phoneNumber->update(['client_id' => $d['client_id'] ?? null]);
+        return $phoneNumber->load('client:id,name,company,is_active')->loadCount('messages');
+    }
     public function destroy(PhoneNumber $phoneNumber) { $phoneNumber->delete(); return response()->noContent(); }
 
     public function sync(WhatsAppService $wa)

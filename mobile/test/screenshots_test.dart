@@ -9,6 +9,7 @@ import 'package:http/testing.dart';
 import 'package:wabusiness/src/api.dart';
 import 'package:wabusiness/src/models.dart';
 import 'package:wabusiness/src/poller.dart';
+import 'package:wabusiness/src/screens/billing.dart';
 import 'package:wabusiness/src/screens/conversations.dart';
 import 'package:wabusiness/src/screens/login.dart';
 import 'package:wabusiness/src/screens/thread.dart';
@@ -17,7 +18,7 @@ import 'package:wabusiness/src/session.dart';
 import 'package:wabusiness/src/store.dart';
 import 'package:wabusiness/src/theme.dart';
 
-const fonts = '/opt/flutter-sdk/flutter/bin/cache/artifacts/material_fonts';
+const fonts = '/home/box/sdk/flutter/bin/cache/artifacts/material_fonts';
 Future<void> loadFont(String family, List<String> files) async {
   final l = FontLoader(family);
   for (final f in files) {
@@ -32,7 +33,7 @@ Msg m(int id, String dir, String body, DateTime t, {String status = 'read', Stri
         filename: filename, mimeType: type == 'document' ? 'application/pdf' : null, mediaId: type == 'document' ? 'mid$id' : null);
 
 Services services() {
-  final api = Api('http://local', client: MockClient((r) async => http.Response('{}', 200)))..token = 't';
+  final api = Api('http://local', client: MockClient((r) async => http.Response(r.url.path.endsWith('/billing/due') ? '{"currency":"INR","charges":43.07,"paid":25,"due":18.07}' : '{}', 200)))..token = 't';
   final store = ChatStore(api);
   final y = now.subtract(const Duration(days: 1));
   store.seed(
@@ -62,14 +63,19 @@ Services services() {
   return s;
 }
 
-Future<void> shot(WidgetTester t, Widget w, String name) async {
+ThemeData testTheme() {
+  final b = buildTheme();
+  return b.copyWith(textTheme: b.textTheme.apply(fontFamily: 'Roboto', fontFamilyFallback: ['NotoEmoji']),
+      filledButtonTheme: FilledButtonThemeData(style: b.filledButtonTheme.style!.copyWith(textStyle: const WidgetStatePropertyAll(TextStyle(fontFamily: 'Roboto', fontSize: 16, fontWeight: FontWeight.w600)))));
+}
+
+Future<void> shot(WidgetTester t, Widget w, String name, {String prefix = 'mobile-'}) async {
   t.view.physicalSize = const Size(1080, 2340);
   t.view.devicePixelRatio = 2.625;
   addTearDown(t.view.reset);
-  await t.pumpWidget(RepaintBoundary(key: const Key('shot'), child: MaterialApp(debugShowCheckedModeBanner: false, theme: buildTheme().copyWith(
-      textTheme: buildTheme().textTheme.apply(fontFamily: 'Roboto', fontFamilyFallback: ['NotoEmoji'])), home: w)));
+  await t.pumpWidget(RepaintBoundary(key: const Key('shot'), child: MaterialApp(debugShowCheckedModeBanner: false, theme: testTheme(), home: w)));
   await t.pump(const Duration(milliseconds: 100));
-  await expectLater(find.byKey(const Key('shot')), matchesGoldenFile('../../screenshots/mobile-$name.png'));
+  await expectLater(find.byKey(const Key('shot')), matchesGoldenFile('../../screenshots/$prefix$name.png'));
 }
 
 void main() {
@@ -123,5 +129,23 @@ void main() {
     expect(find.text('Rahul Verma'), findsOneWidget);
     expect(find.text('Priya Sharma'), findsNothing);
     await expectLater(find.byKey(const Key('shot')), matchesGoldenFile('../../screenshots/mobile-05-search.png'));
+  });
+
+  testWidgets('06 usage & billing', (t) async {
+    final s = services();
+    final st = {'from': '2026-10-01', 'to': '2026-10-21', 'currency': 'INR', 'messages': 155, 'total': 42.5,
+      'lines': [{'category': 'marketing', 'count': 42, 'rate': 0.7846, 'amount': 32.95}, {'category': 'utility', 'count': 65, 'rate': 0.115, 'amount': 7.48},
+        {'category': 'authentication', 'count': 18, 'rate': 0.115, 'amount': 2.07}, {'category': 'service', 'count': 30, 'rate': 0, 'amount': 0}],
+      'payments': [{'id': 1, 'amount': '25.00', 'paid_at': '2026-10-03', 'method': 'UPI', 'reference': 'UTR4471200', 'note': 'Advance'}],
+      'payments_total': 25, 'balance': {'charges': 43.07, 'paid': 25, 'due': 18.07}};
+    await shot(t, BillingScreen(api: s.api, path: '/client/billing', now: now, initial: st), '104-client-app-usage-billing', prefix: '');
+    expect(find.text('Marketing'), findsOneWidget);
+    expect(find.text('₹42.50'), findsOneWidget);
+  });
+
+  testWidgets('07 due chip on chats', (t) async {
+    final s = services();
+    await t.runAsync(() async {});
+    await shot(t, ConversationsScreen(s: s, onLogout: () async {}, now: now), '105-client-app-due-badge', prefix: '');
   });
 }

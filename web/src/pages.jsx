@@ -70,8 +70,15 @@ export function Numbers({ user }) {
   }
   const refresh = async (n) => { setRefreshing(n.id); try { const r = await api(`/phone-numbers/${n.id}/refresh`, { method: 'POST' }); toast.success(`${r.number.display_number}: ${r.number.status || 'status unknown'}${r.number.quality_rating ? ` · quality ${r.number.quality_rating}` : ''}`); reload() } catch (e) { toast.error(e.message) } finally { setRefreshing(null) } }
   const pending = rows.filter((n) => n.status && n.status !== 'CONNECTED')
+  const [assign, setAssign] = useState(null) // {n, client_id}
+  const doAssign = async () => {
+    try { const r = await api(`/phone-numbers/${assign.n.id}/client`, { method: 'PUT', body: { client_id: assign.client_id || null } })
+      toast.success(r.client ? `${r.display_number} assigned to ${r.client.name}: ${r.messages_count} existing message(s) now visible in their Chat` : `${r.display_number} unassigned`); setAssign(null); reload() }
+    catch (e) { toast.error(e.message) }
+  }
+  const unassigned = rows.filter((n) => !n.client_id).length
   return (<div className="page">
-    <PageHeader icon={Phone} title="Number Master" subtitle="WhatsApp phone numbers linked to your WABA"><Button icon={RefreshCw} onClick={sync}>Sync from Meta</Button></PageHeader>
+    <PageHeader icon={Phone} title="Number Master" subtitle={`WhatsApp phone numbers linked to your WABA${!cf && unassigned ? ` · ${unassigned} not assigned to a client` : ''}`}><Button icon={RefreshCw} onClick={sync} title="Import every number already on the WABA (keeps existing client assignments)">Sync numbers from Meta</Button></PageHeader>
     <WabaHealthBanner />
     {pending.length > 0 && <div className="alert warn reg-banner"><AlertCircle size={18} /><div>
       <b>{pending.length === 1 ? `${pending[0].display_number} is ${pending[0].status}` : `${pending.length} numbers are not connected`}: messages from {pending.length === 1 ? 'it' : 'them'} will fail with “(#133010) Account not registered”.</b>
@@ -91,7 +98,8 @@ export function Numbers({ user }) {
         <div className="table-wrap"><table className="table"><thead><tr><th>Number</th><th>Client</th><th>Phone number ID</th><th>Quality</th><th>Status</th><th /></tr></thead>
           {loading ? <TableSkeleton cols={6} /> : rows.length ? <tbody>{rows.map((n) => <tr key={n.id}>
             <td><div className="cell-user"><span className="ico-tile"><Phone size={16} /></span><div><b>{n.display_number}</b><small>{n.name || '—'}</small></div></div></td>
-            <td>{n.client ? <div className="client-cell"><b>{n.client.name}</b><small>{n.client.company || ''}{!n.client.is_active && ' · inactive'}</small></div> : <span className="muted">—</span>}</td>
+            <td>{n.client ? <div className="client-cell"><b>{n.client.name}</b><small>{n.client.company || ''}{!n.client.is_active && ' · inactive'}</small></div> : <span className="client-chip none">Unassigned</span>}
+              <button type="button" className="link-btn" onClick={() => setAssign({ n, client_id: n.client_id ? String(n.client_id) : '' })}>{n.client ? 'Change' : 'Assign client'}</button></td>
             <td><code>{n.phone_number_id}</code></td>
             <td>{n.quality_rating ? <Badge tone={{ GREEN: 'green', YELLOW: 'amber', RED: 'red' }[n.quality_rating] || 'gray'}>{n.quality_rating}</Badge> : <span className="muted">—</span>}</td>
             <td>{n.status ? <Badge tone={n.status === 'CONNECTED' ? 'green' : ['PENDING', 'UNVERIFIED', 'MIGRATED'].includes(n.status) ? 'amber' : ['BANNED', 'FLAGGED', 'RESTRICTED', 'DISCONNECTED', 'DELETED'].includes(n.status) ? 'red' : 'gray'}>{n.status}</Badge> : <span className="muted">—</span>}
@@ -106,6 +114,11 @@ export function Numbers({ user }) {
         </table></div>
       </Card>
     </div>
+    {assign && <Modal title={`Assign ${assign.n.display_number}`} onClose={() => setAssign(null)}
+      footer={<><Button onClick={() => setAssign(null)}>Cancel</Button><Button variant="primary" icon={Check} onClick={doAssign}>{assign.client_id ? 'Assign' : 'Unassign'}</Button></>}>
+      <div className="form"><Field label="Client"><ClientSelect clients={clients} value={assign.client_id} onChange={(v) => setAssign({ ...assign, client_id: v })} /></Field>
+        <div className="alert info"><Info size={15} /><div className="small">All chats on this number, <b>past and future</b>, appear in the client's portal Chat and mobile app right away. Usage on the number is billed to the assigned client.</div></div></div>
+    </Modal>}
     {reg && <Modal title={`Register ${reg.display_number}`} onClose={closeReg} footer={<><Button onClick={closeReg}>Cancel</Button>
       <Button type="submit" form="reg-form" variant="primary" icon={ShieldCheck} loading={regBusy} disabled={!/^\d{6}$/.test(pin)}>Register with Cloud API</Button></>}>
       <form id="reg-form" className="form" onSubmit={register} autoComplete="off">

@@ -1,12 +1,13 @@
 // Client portal (served at /). Must not import or mention the admin path.
 import { useEffect, useRef, useState } from 'react'
-import { LayoutDashboard, MessagesSquare, Phone, FileText, LogOut, Menu, ChevronDown, Bell, MessageCircle, Send, Inbox, CheckCheck, PhoneCall, ClipboardList, Workflow, FlaskConical, Camera, KeyRound, Code2 } from 'lucide-react'
+import { LayoutDashboard, MessagesSquare, Phone, FileText, LogOut, Menu, ChevronDown, Bell, MessageCircle, Send, Inbox, CheckCheck, PhoneCall, ClipboardList, Workflow, FlaskConical, Camera, KeyRound, Code2, IndianRupee } from 'lucide-react'
 import { api, getToken, setToken, fmtTime } from './api'
 import { Spinner, Card, PageHeader, Skeleton, Empty, Badge, useLoad, TableSkeleton, Button } from './ui'
 import { TestSendModal } from './templates'
 import Login from './Login'
 import { ApiKeysPage, UseViaApiModal } from './apikeys'
 import { Chat } from './pages'
+import { UsageBilling, DueBadge } from './billing'
 import { Flows } from './flows'
 import { Instagram } from './instagram'
 import { NumberRequestsPage, TemplateRequestsPage, StatsSection, TemplateDetail } from './portal-extra'
@@ -63,7 +64,7 @@ function MyTemplates() {
 }
 
 const NAV = [['dashboard', 'Dashboard', LayoutDashboard], ['chats', 'Chats', MessagesSquare], ['numbers', 'My numbers', Phone], ['templates', 'My templates', FileText], ['flows', 'Automation flows', Workflow], ['instagram', 'Instagram', Camera],
-  ['number-requests', 'Number requests', PhoneCall], ['template-requests', 'Template requests', ClipboardList], ['developer', 'API keys', KeyRound]]
+  ['number-requests', 'Number requests', PhoneCall], ['template-requests', 'Template requests', ClipboardList], ['billing', 'Usage & billing', IndianRupee], ['developer', 'API keys', KeyRound]]
 const DETAIL = /^template-stats\/(\d+)$/
 
 export default function PortalApp() {
@@ -90,14 +91,14 @@ export default function PortalApp() {
     <div className="content">
       <header className="topbar"><button className="icon-btn burger" onClick={() => setNavOpen(true)}><Menu size={20} /></button>
         <div className="crumb"><span>{me.company || 'Portal'}</span> / <b>{label}</b></div>
-        <div className="topbar-right"><div className="user-menu" ref={menuRef}>
+        <div className="topbar-right"><DueBadge scope="client" onClick={() => go('billing')} /><div className="user-menu" ref={menuRef}>
           <button className="user-btn" onClick={() => setMenu(!menu)}><span className="avatar sm">{me.name.split(' ').map((w) => w[0]).slice(0, 2).join('')}</span>
             <span className="user-meta"><b>{me.name}</b><small>{me.company || 'Client'}</small></span><ChevronDown size={16} /></button>
           {menu && <div className="dropdown"><div className="dd-head"><b>{me.name}</b><small>{me.email}</small></div><button onClick={logout} className="danger"><LogOut size={16} /> Log out</button></div>}
         </div></div>
       </header>
       <main className={`main ${tab === 'chats' ? 'main-chat' : ''}`}>
-        {tab === 'dashboard' && <Home me={me} go={go} />}{tab === 'chats' && <Chat ep={EP} />}{tab === 'numbers' && <MyNumbers />}{tab === 'templates' && <MyTemplates />}{tab === 'developer' && <ApiKeysPage scope="client" />}{tab === 'flows' && <Flows scope="client" />}{tab === 'instagram' && <Instagram scope="client" />}
+        {tab === 'dashboard' && <Home me={me} go={go} />}{tab === 'chats' && <Chat ep={EP} />}{tab === 'numbers' && <MyNumbers />}{tab === 'templates' && <MyTemplates />}{tab === 'developer' && <ApiKeysPage scope="client" />}{tab === 'billing' && <UsageBilling />}{tab === 'flows' && <Flows scope="client" />}{tab === 'instagram' && <Instagram scope="client" />}
         {tab === 'number-requests' && <NumberRequestsPage />}{tab === 'template-requests' && <TemplateRequestsPage />}{DETAIL.test(tab) && <TemplateDetail key={tab} id={tab.match(DETAIL)[1]} go={go} />}
       </main>
     </div>

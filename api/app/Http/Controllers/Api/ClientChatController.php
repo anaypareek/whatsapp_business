@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\DeviceToken;
 use App\Models\Message;
+use App\Models\PhoneNumber;
 use App\Services\FcmService;
 use App\Services\WhatsAppService;
 use Illuminate\Http\Request;
@@ -28,33 +29,55 @@ class ClientChatController extends Controller
         return Cache::remember("chat:pns:{$c->id}", 60, fn () => $c->phoneNumbers()->orderBy('id')->pluck('id')->all());
     }
 
+    /** Cache key part for this caller's chat cursor (client id; "admin" in AdminChatController). */
+    protected function scopeKey(Request $r): string { return (string) $r->user()->id; }
+
+    /** Numbers listed with the conversations. */
+    protected function numberList(Request $r)
+    {
+        return $r->user()->phoneNumbers()->orderBy('id')->get(['id', 'display_number', 'name', 'status', 'quality_rating']);
+    }
+
+    /** Fingerprint of the number set (0…999999): changes when a number is assigned/unassigned, forcing a full reload. */
+    public static function idsHash(array $ids): int { return crc32(implode(',', $ids)) % 1000000; }
+
     /**
      * "maxId.maxUpdatedUnix.rowsInThatSecond" over the client's messages; index-only (messages_pn_updated_index + PK), cached a
      * few seconds. The 3rd part catches several updates within the same second (updated_at has 1s precision).
      */
-    public static function version(int $clientId, array $ids): string
+    public static function version(int|string $key, array $ids): string
     {
         if (! $ids) return '0.0.0';
-        return Cache::remember("chat:ver:$clientId", self::VERSION_TTL, function () use ($ids) {
+        return Cache::remember("chat:ver:$key", self::VERSION_TTL, function () use ($ids) {
             $row = DB::table('messages')->whereIn('phone_number_id', $ids)->selectRaw('MAX(id) mid, MAX(updated_at) mup')->first();
             $n = $row->mup ? DB::table('messages')->whereIn('phone_number_id', $ids)->where('updated_at', $row->mup)->count() : 0;
-            return (int) $row->mid.'.'.($row->mup ? Carbon::parse($row->mup)->timestamp : 0).'.'.$n;
+            // 3rd part = idsHash*1000 + rows-in-that-second (capped): a newly assigned number changes the cursor even when
+            // its (older) messages don't move MAX(id)/MAX(updated_at), and sync() answers with reset → full reload incl. history.
+            return (int) $row->mid.'.'.($row->mup ? Carbon::parse($row->mup)->timestamp : 0).'.'.(self::idsHash($ids) * 1000 + min($n, 999));
         });
     }
 
-    public static function bust(int $clientId): void { Cache::forget("chat:ver:$clientId"); }
+    public static function bust(int|string $key): void { Cache::forget("chat:ver:$key"); }
+
+    /** A number changed owner (or was created/deleted): drop the cached number lists and cursors of everyone involved. */
+    public static function forgetNumberScopes(array $clientIds, ?int $phoneNumberId = null): void
+    {
+        foreach (array_unique(array_filter($clientIds)) as $c) { Cache::forget("chat:pns:$c"); self::bust($c); }
+        Cache::forget('chat:pns:admin'); self::bust('admin');
+        if ($phoneNumberId) Cache::forget("chat:pnclient:$phoneNumberId");
+    }
 
     /** GET /client/chat/sync?cursor=… (or ?since=…) → {changed:false} (or 304 with If-None-Match) | deltas. */
     public function sync(Request $r)
     {
         $ids = $this->numberIds($r);
-        $cur = self::version($r->user()->id, $ids);
+        $cur = static::version($this->scopeKey($r), $ids);
         $etag = '"c'.$cur.'"';
         $given = (string) ($r->query('cursor') ?? $r->query('since', ''));
         if ($given === $cur || $r->header('If-None-Match') === $etag) {
             return response()->json(['changed' => false, 'cursor' => $cur], $r->header('If-None-Match') === $etag ? 304 : 200)->setEtag(trim($etag, '"'));
         }
-        if (! preg_match('/^(\d+)\.(\d+)(?:\.\d+)?$/', $given, $m)) return response()->json(['changed' => true, 'reset' => true, 'cursor' => $cur])->setEtag(trim($etag, '"'));
+        if (! preg_match('/^(\d+)\.(\d+)(?:\.(\d+))?$/', $given, $m) || (isset($m[3]) && intdiv((int) $m[3], 1000) !== self::idsHash($ids))) return response()->json(['changed' => true, 'reset' => true, 'cursor' => $cur])->setEtag(trim($etag, '"'));
         [$sinceId, $sinceTs] = [(int) $m[1], (int) $m[2]];
         $msgs = Message::whereIn('phone_number_id', $ids)
             ->where(fn ($q) => $q->where('id', '>', $sinceId)->orWhere('updated_at', '>=', Carbon::createFromTimestamp($sinceTs)))
@@ -69,10 +92,10 @@ class ClientChatController extends Controller
     public function conversations(Request $r)
     {
         $ids = $this->numberIds($r);
-        $cur = self::version($r->user()->id, $ids);
+        $cur = static::version($this->scopeKey($r), $ids);
         if ($r->filled('phone_number_id')) $ids = array_values(array_intersect($ids, [(int) $r->phone_number_id]));
         return ['cursor' => $cur, 'conversations' => $this->summaries($ids, null), 'unread_total' => $this->unreadTotal($ids),
-            'numbers' => $r->user()->phoneNumbers()->orderBy('id')->get(['id', 'display_number', 'name', 'status', 'quality_rating'])];
+            'numbers' => $this->numberList($r)];
     }
 
     /** GET /client/chat/thread?phone_number_id&contact[&before_id][&limit=50] → newest page (ascending), marks inbound as read. */
@@ -85,7 +108,7 @@ class ClientChatController extends Controller
         $page = (clone $q)->when($d['before_id'] ?? null, fn ($x, $b) => $x->where('id', '<', $b))->orderByDesc('id')->limit($limit + 1)->get();
         $more = $page->count() > $limit;
         if (empty($d['before_id'])) $this->markRead($r, (int) $d['phone_number_id'], $d['contact']);
-        return ['messages' => $page->take($limit)->reverse()->values(), 'has_more' => $more, 'cursor' => self::version($r->user()->id, $this->numberIds($r))];
+        return ['messages' => $page->take($limit)->reverse()->values(), 'has_more' => $more, 'cursor' => static::version($this->scopeKey($r), $this->numberIds($r))];
     }
 
     /** POST /client/chat/read {phone_number_id, contact} — while a thread is open and new messages arrive. */
@@ -144,7 +167,11 @@ class ClientChatController extends Controller
     protected function markRead(Request $r, int $pn, string $contact): int
     {
         $n = Message::where('phone_number_id', $pn)->where('contact_wa_id', $contact)->where('direction', 'in')->whereNull('read_at')->update(['read_at' => now()]);
-        if ($n) self::bust($r->user()->id);
+        if ($n) {
+            self::bust($this->scopeKey($r)); self::bust('admin');
+            $owner = (int) PhoneNumber::whereKey($pn)->value('client_id');
+            if ($owner) self::bust($owner);
+        }
         return $n;
     }
 

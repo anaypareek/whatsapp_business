@@ -4,11 +4,14 @@ int _int(dynamic v) => v is int ? v : int.tryParse('${v ?? ''}') ?? 0;
 String convKey(int pn, String contact) => '$pn|$contact';
 
 class WaNumber {
-  final int id; final String displayNumber; final String? name; final String? status;
-  WaNumber({required this.id, required this.displayNumber, this.name, this.status});
+  final int id; final String displayNumber; final String? name; final String? status; final String? clientName;
+  WaNumber({required this.id, required this.displayNumber, this.name, this.status, this.clientName});
   factory WaNumber.fromJson(Map<String, dynamic> j) =>
-      WaNumber(id: _int(j['id']), displayNumber: '${j['display_number'] ?? ''}', name: j['name'] as String?, status: j['status'] as String?);
-  String get label => (name != null && name!.isNotEmpty) ? name! : displayNumber;
+      WaNumber(id: _int(j['id']), displayNumber: '${j['display_number'] ?? ''}', name: j['name'] as String?, status: j['status'] as String?,
+          clientName: j['client'] is Map ? ((j['client']['company'] ?? j['client']['name']) as String?) : null);
+  String get _base => (name != null && name!.isNotEmpty) ? name! : displayNumber;
+  /// Master app shows which client owns the number.
+  String get label => clientName == null || clientName!.isEmpty ? _base : '$_base · $clientName';
 }
 
 class Msg {

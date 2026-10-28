@@ -9,6 +9,17 @@ class PhoneNumber extends Model
         'name_status', 'platform_type', 'code_verification_status', 'account_mode', 'messaging_limit_tier', 'meta_checked_at'];
     protected $casts = ['meta_checked_at' => 'datetime'];
 
+    /** Assigning a number to a client makes its whole history (past + future) visible in that client's chat at once. */
+    protected static function booted(): void
+    {
+        static::saved(function (PhoneNumber $p) {
+            if ($p->wasRecentlyCreated || $p->wasChanged('client_id')) {
+                \App\Http\Controllers\Api\ClientChatController::forgetNumberScopes([(int) $p->getOriginal('client_id'), (int) $p->client_id], $p->id);
+            }
+        });
+        static::deleted(fn (PhoneNumber $p) => \App\Http\Controllers\Api\ClientChatController::forgetNumberScopes([(int) $p->client_id], $p->id));
+    }
+
     /** Store the fields returned by GET /{phone-number-id} (missing fields keep their current value). */
     public function applyMeta(array $m): self
     {

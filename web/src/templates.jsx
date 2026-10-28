@@ -134,6 +134,7 @@ export function Templates() {
   const [rows, setRows] = useState(null); const [flt, setFlt] = useState({ status: '', category: '', language: '', q: '', client_id: '' })
   const [testing, setTesting] = useState(null); const [apiFor, setApiFor] = useState(null)
   const [mode, setMode] = useState(null); const toast = useToast()
+  const [sel, setSel] = useState(() => new Set()); const [assignTo, setAssignTo] = useState(null) // bulk assign
   const load = useCallback(() => { const qs = new URLSearchParams(Object.entries(flt).filter(([, v]) => v)).toString(); return api(`/templates?${qs}`).then(setRows).catch((e) => toast.error(e.message)) }, [flt]) // eslint-disable-line
   useEffect(() => { load() }, [load])
   useEffect(() => { const t = setInterval(load, 15000); return () => clearInterval(t) }, [load])
@@ -152,6 +153,16 @@ export function Templates() {
   const all = rows || []
   const langs = useMemo(() => [...new Set(all.map((r) => r.language))], [rows]) // eslint-disable-line
   const counts = useMemo(() => all.reduce((a, t) => ({ ...a, [t.status]: (a[t.status] || 0) + 1 }), {}), [rows]) // eslint-disable-line
+  const toggle = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const allOn = all.length > 0 && all.every((t) => sel.has(t.id))
+  const toggleAll = () => setSel(allOn ? new Set() : new Set(all.map((t) => t.id)))
+  const bulkAssign = async () => {
+    const ids = [...sel]; const cid = assignTo.client_id || null
+    try { const r = await api('/templates-assign', { method: 'POST', body: { ids, client_id: cid } })
+      const c = clients.find((x) => String(x.id) === String(cid))
+      toast.success(cid ? `${r.updated} template(s) assigned to ${c?.name || 'client'}` : `${r.updated} template(s) unassigned`); setSel(new Set()); setAssignTo(null); load() }
+    catch (e) { toast.error(e.message) }
+  }
 
   if (mode?.new || mode?.edit) return <TemplateForm clients={clients} initial={mode.edit ? toForm(mode.edit) : blankForm()} editing={mode.edit}
     onDone={() => { toast.success(mode.edit ? 'Edit submitted; template is back in review' : 'Template submitted to Meta for review'); setMode(null); load() }} onCancel={() => setMode(null)} />
@@ -169,9 +180,13 @@ export function Templates() {
         <ClientSelect allowAll clients={clients} value={flt.client_id} onChange={(v) => setFlt({ ...flt, client_id: v })} />
         <select value={flt.category} onChange={(e) => setFlt({ ...flt, category: e.target.value })}><option value="">All categories</option><option>UTILITY</option><option>MARKETING</option><option>AUTHENTICATION</option></select>
         <select value={flt.language} onChange={(e) => setFlt({ ...flt, language: e.target.value })}><option value="">All languages</option>{langs.map((l) => <option key={l}>{l}</option>)}</select></div>}>
-        <div className="table-wrap"><table className="table"><thead><tr><th>Template</th><th>Category</th><th>Status</th><th>Quality</th><th>Vars</th><th /></tr></thead>
-          {rows === null ? <TableSkeleton cols={6} /> : all.length ? <tbody>{all.map((t) => <tr key={t.id} className={`clickable ${mode?.view?.id === t.id ? 'sel' : ''}`} onClick={() => view(t)}>
-            <td><b>{t.name}</b><small className="block muted">{t.language}{t.client ? ` · ${t.client.name}` : ''}</small>{t.rejected_reason && <small className="block err-text">Rejected: {t.rejected_reason}</small>}</td>
+        {sel.size > 0 && <div className="bulk-bar"><b>{sel.size} selected</b>
+          <Button size="sm" variant="primary" icon={Briefcase} onClick={() => setAssignTo({ client_id: '' })}>Assign to client</Button>
+          <Button size="sm" variant="ghost" onClick={() => setSel(new Set())}>Clear</Button></div>}
+        <div className="table-wrap"><table className="table"><thead><tr><th className="chk" onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label="Select all" checked={allOn} onChange={toggleAll} /></th><th>Template</th><th>Category</th><th>Status</th><th>Quality</th><th>Vars</th><th /></tr></thead>
+          {rows === null ? <TableSkeleton cols={7} /> : all.length ? <tbody>{all.map((t) => <tr key={t.id} className={`clickable ${mode?.view?.id === t.id ? 'sel' : ''} ${sel.has(t.id) ? 'checked' : ''}`} onClick={() => view(t)}>
+            <td className="chk" onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`Select ${t.name}`} checked={sel.has(t.id)} onChange={() => toggle(t.id)} /></td>
+            <td><b>{t.name}</b><small className="block muted">{t.language}</small>{t.client ? <span className="client-chip"><Briefcase size={11} />{t.client.name}</span> : <span className="client-chip none">Unassigned</span>}{t.rejected_reason && <small className="block err-text">Rejected: {t.rejected_reason}</small>}</td>
             <td>{t.category}{t.previous_category && <small className="block muted">was {t.previous_category}</small>}</td>
             <td><Badge s={t.status} /></td><td>{t.quality_score ? <span className={`q ${t.quality_score.toLowerCase()}`}>● {t.quality_score}</span> : <span className="muted">—</span>}</td>
             <td>{t.body_variable_count}{t.header_format && t.header_format !== 'TEXT' ? ` + ${t.header_format.toLowerCase()}` : ''}{t.header_variable_count ? ' + hdr' : ''}</td>
@@ -181,9 +196,15 @@ export function Templates() {
               {t.status === 'APPROVED' && <Button size="sm" variant="ghost" icon={Code2} title="Code to send this template from your server" onClick={() => setApiFor(t)}>Use via API</Button>}
               <Button size="sm" variant="ghost" icon={t.edit_check.allowed ? Pencil : Lock} title={t.edit_check.reason || 'Edit'} onClick={() => edit(t)} />
               <Button size="sm" variant="ghost-danger" icon={Trash2} onClick={() => del(t)} /></td></tr>)}</tbody>
-            : <tbody><tr><td colSpan={6}><Empty icon={FileText} title="No templates">Click “Sync from Meta” or create a new one.</Empty></td></tr></tbody>}
+            : <tbody><tr><td colSpan={7}><Empty icon={FileText} title="No templates">Click “Sync from Meta” or create a new one.</Empty></td></tr></tbody>}
         </table></div>
       </Card>
+      {assignTo && <Modal title={`Assign ${sel.size} template${sel.size > 1 ? 's' : ''}`} onClose={() => setAssignTo(null)}
+        footer={<><Button onClick={() => setAssignTo(null)}>Cancel</Button><Button variant="primary" icon={Briefcase} onClick={bulkAssign}>{assignTo.client_id ? 'Assign' : 'Unassign'}</Button></>}>
+        <div className="form"><Field label="Client" hint="Approved templates appear in this client's “My templates” (portal + API). Choose “No client” to unassign.">
+          <ClientSelect clients={clients} value={assignTo.client_id} onChange={(v) => setAssignTo({ client_id: v })} /></Field>
+          <div className="small muted">{all.filter((t) => sel.has(t.id)).map((t) => t.name).slice(0, 8).join(', ')}{sel.size > 8 ? ` +${sel.size - 8} more` : ''}</div></div>
+      </Modal>}
       {testing && <TestSendModal template={testing} onClose={() => setTesting(null)} />}
       {apiFor && <UseViaApiModal template={apiFor} numbersPath="/phone-numbers" keysHref="keys" onClose={() => setApiFor(null)} />}
     {mode?.view && <div className="sticky"><Card title={mode.view.name} icon={Eye} actions={<button className="icon-btn" onClick={() => setMode(null)}><X size={16} /></button>}>
