@@ -179,6 +179,6 @@ Route::middleware(['auth:sanctum', EnsureStaff::class])->group(function () {
         Route::get('/settings', [Api\SettingsController::class, 'show']);
         Route::put('/settings', [Api\SettingsController::class, 'update']);
         Route::get('/api-keys/logs', [Api\ApiKeyController::class, 'logs']);
-        Route::apiResource('api-keys', Api\ApiKeyController::class)->only(['index', 'store', 'update', 'destroy'])->parameters(['api-keys' => 'apiKey']);
+        Route::apiResource('api-keys', Api\ApiKeyController::class)->only(['index', 'store', 'update', 'destroy'])->parameters(['api-keys' => 'apiKey'])->names('client.api-keys');
     });
 });
