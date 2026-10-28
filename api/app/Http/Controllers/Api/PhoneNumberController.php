@@ -35,6 +35,7 @@ class PhoneNumberController extends Controller
     public function sync(WhatsAppService $wa)
     {
         try { $remote = $wa->listPhoneNumbers(); } catch (Throwable $e) { return $this->fail($e); }
+        \App\Services\WabaHealth::refreshQuietly();
         $waba = Setting::get('waba_id');
         foreach ($remote as $n) {
             $p = PhoneNumber::firstOrNew(['phone_number_id' => $n['id']]);

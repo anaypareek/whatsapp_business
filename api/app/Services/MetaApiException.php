@@ -13,7 +13,7 @@ class MetaApiException extends RuntimeException
         $title = $error['error_user_title'] ?? null;
         $code = isset($error['code']) ? ' (#'.$error['code'].(isset($error['error_subcode']) ? '/'.$error['error_subcode'] : '').')' : '';
         if (isset($error['code'])) $msg = preg_replace('/^\(#'.preg_quote((string) $error['code'], '/').'\)\s*/', '', $msg); // code is already in the prefix
-        $hint = self::HINTS[(int) ($error['code'] ?? 0)] ?? null;
+        $hint = self::SUBCODE_HINTS[(int) ($error['error_subcode'] ?? 0)] ?? self::HINTS[(int) ($error['code'] ?? 0)] ?? null;
         parent::__construct('Meta API error'.$code.': '.($title && ! str_contains($msg, $title) ? "$title – " : '').$msg.($hint ? (preg_match('/[.!?]$/', trim($msg)) ? ' ' : '. ').$hint : ''), $httpStatus);
     }
 
@@ -28,7 +28,12 @@ class MetaApiException extends RuntimeException
         133016 => 'Too many register/deregister attempts for this number. Wait (up to 72 hours) before trying again.',
     ];
 
-    public function hint(): ?string { return self::HINTS[$this->metaCode() ?? 0] ?? null; }
+    /** Hints keyed by error_subcode (checked first). 2388339 = template create rejected because the WABA is blocked. */
+    public const SUBCODE_HINTS = [
+        2388339 => 'Your WhatsApp account is blocked by Meta, often a payment-method issue (141006). Check Business Settings → WhatsApp accounts → Payment settings.',
+    ];
+
+    public function hint(): ?string { return self::SUBCODE_HINTS[$this->metaSubcode() ?? 0] ?? self::HINTS[$this->metaCode() ?? 0] ?? null; }
 
     public function metaCode(): ?int { return isset($this->error['code']) ? (int) $this->error['code'] : null; }
     public function metaSubcode(): ?int { return isset($this->error['error_subcode']) ? (int) $this->error['error_subcode'] : null; }

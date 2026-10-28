@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { FileText, Plus, RefreshCw, Pencil, Trash2, Send, Search, X, Lock, Eye, History, Phone, Hash, Link2, Reply, PhoneCall, FlaskConical, CheckCircle2, AlertCircle, Briefcase } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { renumber, insertVariable, placeholders, renderWa } from './wa-format'
+import { FormatToolbar } from './editor-tools'
+import { WabaHealthBanner, UseViaApiModal } from './apikeys'
+import { FileText, Plus, RefreshCw, Pencil, Trash2, Send, Search, X, Lock, Eye, History, Phone, Hash, Link2, Reply, PhoneCall, FlaskConical, Code2, CheckCircle2, AlertCircle, Briefcase } from 'lucide-react'
 import { api, fmtTime } from './api'
 import { ClientSelect } from './clients'
 import { Button, Card, PageHeader, Field, TableSkeleton, Empty, Modal, Spinner, Badge as UiBadge, useToast } from './ui'
@@ -8,9 +11,6 @@ export const LANGS = ['en_US', 'en', 'en_GB', 'hi', 'mr', 'gu', 'bn', 'ta', 'te'
 const STATUSES = ['APPROVED', 'PENDING', 'REJECTED', 'PAUSED', 'DISABLED', 'IN_APPEAL']
 const fill = (s, vals) => (s || '').replace(/\{\{\s*(\d+)\s*\}\}/g, (m, n) => vals?.[n - 1] || m)
 const countVars = (s) => Math.max(0, ...[...(s || '').matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((m) => +m[1]))
-const fmtWa = (s) => (s || '').split(/(\*[^*\n]+\*|_[^_\n]+_|~[^~\n]+~)/g).map((p, i) =>
-  /^\*.+\*$/.test(p) ? <b key={i}>{p.slice(1, -1)}</b> : /^_.+_$/.test(p) ? <i key={i}>{p.slice(1, -1)}</i> : /^~.+~$/.test(p) ? <s key={i}>{p.slice(1, -1)}</s> : p)
-
 export const Badge = ({ s }) => <UiBadge s={s} />
 
 /** WhatsApp-style preview from a form object {header, body, footer, buttons} with variable values. */
@@ -22,7 +22,7 @@ export function Preview({ form, headerVal, bodyVals, buttonVals }) {
     {fmt === 'IMAGE' && (headerVal && /^https?:/.test(headerVal) ? <img src={headerVal} alt="" /> : <div className="tpl-media">🖼 Image</div>)}
     {fmt === 'VIDEO' && <div className="tpl-media">🎬 Video</div>}
     {fmt === 'DOCUMENT' && <div className="tpl-media">📄 Document</div>}
-    <div className="text">{fmtWa(fill(form.body?.text, bodyVals ?? form.body?.examples)) || <span className="muted">Body text…</span>}</div>
+    <div className="text">{renderWa(fill(form.body?.text, bodyVals ?? form.body?.examples)) || <span className="muted">Body text…</span>}</div>
     {form.footer && <div className="tpl-f">{form.footer}</div>}
     <div className="meta">{fmtTime(new Date().toISOString())}</div>
     {(form.buttons || []).map((b, i) => <div key={i} className="tpl-btn">{b.type === 'URL' ? <Link2 size={14} /> : b.type === 'PHONE_NUMBER' ? <PhoneCall size={14} /> : <Reply size={14} />}{b.text || 'Button'}
@@ -51,11 +51,34 @@ export function TemplateForm({ initial, editing, onDone, onCancel, submit, title
   const [clientId, setClientId] = useState(editing?.client_id ? String(editing.client_id) : '')
   const [busy, setBusy] = useState(false); const toast = useToast()
   const n = countVars(f.body.text)
-  const set = (patch) => setF({ ...f, ...patch })
-  const setH = (patch) => set({ header: { ...f.header, ...patch } })
+  const bodyRef = useRef(null); const headRef = useRef(null)
+  const set = (patch) => setF((cur) => ({ ...cur, ...patch }))
+  // every body edit renumbers {{n}} 1..n in order of appearance; examples follow their variable
+  const setBody = (text, sel) => {
+    const r = renumber(text, f.body.examples, sel?.end ?? bodyRef.current?.selectionEnd ?? text.length)
+    set({ body: { ...f.body, text: r.text, examples: r.examples } })
+    if (r.text !== text) requestAnimationFrame(() => { const el = bodyRef.current; if (el) el.setSelectionRange(r.caret, r.caret) })
+  }
+  const addBodyVar = () => {
+    const el = bodyRef.current; const s0 = el?.selectionStart ?? f.body.text.length; const e0 = el?.selectionEnd ?? s0
+    const r = insertVariable(f.body.text, f.body.examples, s0, e0)
+    set({ body: { ...f.body, text: r.text, examples: r.examples } })
+    requestAnimationFrame(() => { const e = bodyRef.current; if (e) { e.focus(); e.setSelectionRange(r.start, r.end) } })
+  }
+  const headVars = f.header.format === 'TEXT' ? placeholders(f.header.text).length : 0
+  const setHeadText = (text) => setH({ text: renumber(text).text })
+  const addHeadVar = () => {
+    const el = headRef.current; const s0 = el?.selectionStart ?? (f.header.text || '').length
+    const r = insertVariable(f.header.text || '', [], s0, el?.selectionEnd ?? s0)
+    setH({ text: r.text }); requestAnimationFrame(() => { const e = headRef.current; if (e) { e.focus(); e.setSelectionRange(r.start, r.end) } })
+  }
+  const setH = (patch) => setF((cur) => ({ ...cur, header: { ...cur.header, ...patch } }))
   const setBtn = (i, patch) => set({ buttons: f.buttons.map((b, j) => (j === i ? { ...b, ...patch } : b)) })
   const save = async (e) => {
-    e.preventDefault(); setBusy(true)
+    e.preventDefault()
+    if (headVars > 1) { toast.error('The header can have only one variable ({{1}}).'); return }
+    if (f.body.examples.slice(0, n).some((x) => !String(x || '').trim())) { toast.error('Add a sample value for every body variable.'); return }
+    setBusy(true)
     const body = { ...f, header: f.header.format === 'NONE' ? null : f.header, body: { text: f.body.text, examples: f.body.examples.slice(0, n) }, footer: f.footer || null, ...(clients ? { client_id: clientId || null } : {}) }
     try { if (submit) await submit(body); else await api(editing ? `/templates/${editing.id}` : '/templates', { method: editing ? 'PUT' : 'POST', body }); onDone() }
     catch (e) { toast.error(e.message) } finally { setBusy(false) }
@@ -76,13 +99,17 @@ export function TemplateForm({ initial, editing, onDone, onCancel, submit, title
           {clients && <Field label="Client" icon={Briefcase} hint="Optional. The template appears in this client's portal once approved."><ClientSelect clients={clients} value={clientId} onChange={setClientId} placeholder="None / Internal" /></Field>}
           <div className="form-3">
             <Field label="Header"><select value={f.header.format} onChange={(e) => setH({ format: e.target.value })}>{['NONE', 'TEXT', 'IMAGE', 'DOCUMENT', 'VIDEO'].map((x) => <option key={x}>{x}</option>)}</select></Field>
-            {f.header.format === 'TEXT' && <Field label="Header text" hint="Max 60, one {{1}}" className="span2"><input maxLength={60} value={f.header.text} onChange={(e) => setH({ text: e.target.value })} /></Field>}
+            {f.header.format === 'TEXT' && <Field label="Header text" hint={headVars > 1 ? <span className="err-text">Only one variable is allowed in the header</span> : 'Max 60 characters, at most one {{1}}'} className="span2">
+              <div className="row gap8"><input ref={headRef} maxLength={60} value={f.header.text} onChange={(e) => setHeadText(e.target.value)} style={{ flex: 1 }} />
+                <button type="button" className="tb-btn wide" disabled={headVars >= 1} title={headVars >= 1 ? 'The header already has its variable' : 'Insert {{1}}'} onMouseDown={(e) => e.preventDefault()} onClick={addHeadVar}>+ Variable</button></div></Field>}
             {['IMAGE', 'DOCUMENT', 'VIDEO'].includes(f.header.format) && <Field label="Sample header_handle" hint="From Meta's Resumable Upload API" className="span2"><input value={f.header.example} onChange={(e) => setH({ example: e.target.value })} /></Field>}
           </div>
-          {f.header.format === 'TEXT' && countVars(f.header.text) > 0 && <Field label="Header {{1}} example"><input value={f.header.example} onChange={(e) => setH({ example: e.target.value })} /></Field>}
-          <Field label={`Body (${f.body.text.length}/1024)`} hint="Use {{1}}, {{2}}… and *bold* _italic_ ~strike~"><textarea rows={6} maxLength={1024} value={f.body.text} onChange={(e) => set({ body: { ...f.body, text: e.target.value } })} required /></Field>
-          {n > 0 && <div className="form-3">{Array.from({ length: n }, (_, i) => <Field key={i} label={`Example {{${i + 1}}}`}><input value={f.body.examples[i] || ''}
-            onChange={(e) => { const ex = [...f.body.examples]; ex[i] = e.target.value; set({ body: { ...f.body, examples: ex } }) }} /></Field>)}</div>}
+          {f.header.format === 'TEXT' && headVars > 0 && <Field label="Header {{1}} sample"><input value={f.header.example} onChange={(e) => setH({ example: e.target.value })} /></Field>}
+          <Field label={`Body (${f.body.text.length}/1024)`} hint="Select text and use the toolbar; variables renumber automatically">
+            <div className="editor-box"><FormatToolbar inputRef={bodyRef} value={f.body.text} onChange={(t, sel) => setBody(t, sel)} onAddVariable={addBodyVar} emoji />
+              <textarea ref={bodyRef} rows={6} maxLength={1024} value={f.body.text} onChange={(e) => setBody(e.target.value, { end: e.target.selectionEnd })} required /></div></Field>
+          {n > 0 && <div className="var-samples"><small className="muted">Sample values (shown to Meta reviewers and in the preview)</small><div className="form-3">{Array.from({ length: n }, (_, i) => <Field key={i} label={`Sample {{${i + 1}}}`}><input value={f.body.examples[i] || ''} placeholder={`Value for {{${i + 1}}}`}
+            onChange={(e) => { const ex = [...f.body.examples]; ex[i] = e.target.value; set({ body: { ...f.body, examples: ex } }) }} /></Field>)}</div></div>}
           <Field label="Footer (optional, max 60)"><input maxLength={60} value={f.footer} onChange={(e) => set({ footer: e.target.value })} /></Field>
           <div className="row between"><span className="field-label">Buttons ({f.buttons.length}/10)</span>
             <Button size="sm" icon={Plus} disabled={f.buttons.length >= 10} onClick={() => set({ buttons: [...f.buttons, { type: 'QUICK_REPLY', text: '', url: '', phone_number: '', example: '' }] })}>Add button</Button></div>
@@ -105,7 +132,7 @@ export function Templates() {
   const [clients, setClients] = useState([])
   useEffect(() => { api('/clients-list').then(setClients).catch(() => {}) }, [])
   const [rows, setRows] = useState(null); const [flt, setFlt] = useState({ status: '', category: '', language: '', q: '', client_id: '' })
-  const [testing, setTesting] = useState(null)
+  const [testing, setTesting] = useState(null); const [apiFor, setApiFor] = useState(null)
   const [mode, setMode] = useState(null); const toast = useToast()
   const load = useCallback(() => { const qs = new URLSearchParams(Object.entries(flt).filter(([, v]) => v)).toString(); return api(`/templates?${qs}`).then(setRows).catch((e) => toast.error(e.message)) }, [flt]) // eslint-disable-line
   useEffect(() => { load() }, [load])
@@ -133,6 +160,7 @@ export function Templates() {
     <PageHeader icon={FileText} title="Template Master" subtitle="Create, review and sync WhatsApp message templates">
       <Button icon={RefreshCw} onClick={sync}>Sync from Meta</Button><Button variant="primary" icon={Plus} onClick={() => setMode({ new: true })}>New template</Button>
     </PageHeader>
+    <WabaHealthBanner />
     <div className="status-tabs">{['', ...STATUSES].map((s) => <button key={s || 'all'} className={flt.status === s ? 'on' : ''} onClick={() => setFlt({ ...flt, status: s })}>
       {s ? s.replace('_', ' ').toLowerCase() : 'all'}<em>{s ? counts[s] || 0 : all.length}</em></button>)}</div>
     <div className={mode?.view ? 'grid-2-1' : ''}>
@@ -150,12 +178,14 @@ export function Templates() {
             <td className="right nowrap" onClick={(e) => e.stopPropagation()}>
               <span className="tip-wrap" data-tip={t.status === 'APPROVED' ? null : `Only APPROVED templates can be tested (this one is ${t.status})`}>
                 <Button size="sm" variant="ghost" icon={FlaskConical} disabled={t.status !== 'APPROVED'} title={t.status === 'APPROVED' ? 'Send a test with demo values' : undefined} onClick={() => setTesting(t)}>Test</Button></span>
+              {t.status === 'APPROVED' && <Button size="sm" variant="ghost" icon={Code2} title="Code to send this template from your server" onClick={() => setApiFor(t)}>Use via API</Button>}
               <Button size="sm" variant="ghost" icon={t.edit_check.allowed ? Pencil : Lock} title={t.edit_check.reason || 'Edit'} onClick={() => edit(t)} />
               <Button size="sm" variant="ghost-danger" icon={Trash2} onClick={() => del(t)} /></td></tr>)}</tbody>
             : <tbody><tr><td colSpan={6}><Empty icon={FileText} title="No templates">Click “Sync from Meta” or create a new one.</Empty></td></tr></tbody>}
         </table></div>
       </Card>
       {testing && <TestSendModal template={testing} onClose={() => setTesting(null)} />}
+      {apiFor && <UseViaApiModal template={apiFor} numbersPath="/phone-numbers" keysHref="keys" onClose={() => setApiFor(null)} />}
     {mode?.view && <div className="sticky"><Card title={mode.view.name} icon={Eye} actions={<button className="icon-btn" onClick={() => setMode(null)}><X size={16} /></button>}>
         <div className="row wrap gap8"><Badge s={mode.view.status} /><UiBadge tone="orange">{mode.view.category}</UiBadge><UiBadge>{mode.view.language}</UiBadge>{mode.view.quality_score && <UiBadge>quality {mode.view.quality_score}</UiBadge>}</div>
         {mode.view.rejected_reason && <div className="alert error">Rejection reason: <b>{mode.view.rejected_reason}</b></div>}

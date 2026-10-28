@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Send, Inbox, AlertTriangle, Phone, FileText, Bot, Users, KeyRound, MessagesSquare, Plus, RefreshCw, ArrowUpRight, ArrowDownRight, TrendingUp, PhoneCall, ClipboardList } from 'lucide-react'
 import { api, fmtShort } from './api'
 import { Card, PageHeader, Skeleton, Button, Empty, Avatar, useToast } from './ui'
+import { WabaHealthBanner } from './apikeys'
 
 function Stat({ icon: Icon, label, value, sub, tone = 'orange', trend, loading }) {
   return (<div className={`stat tone-${tone}`}>
@@ -70,6 +71,7 @@ export default function Dashboard({ go, user }) {
       <Button icon={RefreshCw} onClick={load}>Refresh</Button>
       <Button variant="primary" icon={Send} onClick={() => go('send')}>New message</Button>
     </PageHeader>
+    <WabaHealthBanner />
 
     <div className="stats">
       <Stat icon={Send} label="Sent today" value={d?.messages.sent_today} loading={L} trend={s.length ? pct(s[6]?.sent, s[5]?.sent) : null} sub={`${(d?.messages.total_sent ?? 0).toLocaleString('en-IN')} total sent`} />

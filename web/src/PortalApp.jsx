@@ -1,10 +1,11 @@
 // Client portal (served at /). Must not import or mention the admin path.
 import { useEffect, useRef, useState } from 'react'
-import { LayoutDashboard, MessagesSquare, Phone, FileText, LogOut, Menu, ChevronDown, Bell, MessageCircle, Send, Inbox, CheckCheck, PhoneCall, ClipboardList, Workflow, FlaskConical, Camera } from 'lucide-react'
+import { LayoutDashboard, MessagesSquare, Phone, FileText, LogOut, Menu, ChevronDown, Bell, MessageCircle, Send, Inbox, CheckCheck, PhoneCall, ClipboardList, Workflow, FlaskConical, Camera, KeyRound, Code2 } from 'lucide-react'
 import { api, getToken, setToken, fmtTime } from './api'
 import { Spinner, Card, PageHeader, Skeleton, Empty, Badge, useLoad, TableSkeleton, Button } from './ui'
 import { TestSendModal } from './templates'
 import Login from './Login'
+import { ApiKeysPage, UseViaApiModal } from './apikeys'
 import { Chat } from './pages'
 import { Flows } from './flows'
 import { Instagram } from './instagram'
@@ -48,19 +49,21 @@ function MyNumbers() {
 
 function MyTemplates() {
   const [rows, , loading] = useLoad('/client/templates')
-  const [testing, setTesting] = useState(null)
+  const [testing, setTesting] = useState(null); const [apiFor, setApiFor] = useState(null)
   return (<div className="page"><PageHeader icon={FileText} title="My templates" subtitle="Approved message templates assigned to your account" />
     <Card pad={false}><div className="table-wrap"><table className="table"><thead><tr><th>Template</th><th>Category</th><th>Status</th><th>Updated</th><th /></tr></thead>
       {loading ? <TableSkeleton cols={5} /> : rows.length ? <tbody>{rows.map((t) => <tr key={t.id}><td><b>{t.name}</b><small className="block muted">{t.language}</small>{t.rejected_reason && <small className="block err-text">Rejected: {t.rejected_reason}</small>}</td>
         <td>{t.category}</td><td><Badge s={t.status} /></td><td className="muted">{fmtTime(t.updated_at)}</td>
-        <td className="right"><Button size="sm" variant="ghost" icon={FlaskConical} disabled={t.status !== 'APPROVED'} title={t.status === 'APPROVED' ? 'Send a test with demo values' : 'Only APPROVED templates can be tested'} onClick={() => setTesting(t)}>Test</Button></td></tr>)}</tbody>
+        <td className="right"><Button size="sm" variant="ghost" icon={FlaskConical} disabled={t.status !== 'APPROVED'} title={t.status === 'APPROVED' ? 'Send a test with demo values' : 'Only APPROVED templates can be tested'} onClick={() => setTesting(t)}>Test</Button>
+          {t.status === 'APPROVED' && <Button size="sm" variant="ghost" icon={Code2} title="Code to send this template from your server" onClick={() => setApiFor(t)}>Use via API</Button>}</td></tr>)}</tbody>
         : <tbody><tr><td colSpan={5}><Empty icon={FileText} title="No templates yet" /></td></tr></tbody>}
     </table></div></Card>
-    {testing && <TestSendModal template={testing} base="/client" numbersPath="/client/numbers" onClose={() => setTesting(null)} />}</div>)
+    {testing && <TestSendModal template={testing} base="/client" numbersPath="/client/numbers" onClose={() => setTesting(null)} />}
+    {apiFor && <UseViaApiModal template={apiFor} numbersPath="/client/numbers" keysHref="/developer" onClose={() => setApiFor(null)} />}</div>)
 }
 
 const NAV = [['dashboard', 'Dashboard', LayoutDashboard], ['chats', 'Chats', MessagesSquare], ['numbers', 'My numbers', Phone], ['templates', 'My templates', FileText], ['flows', 'Automation flows', Workflow], ['instagram', 'Instagram', Camera],
-  ['number-requests', 'Number requests', PhoneCall], ['template-requests', 'Template requests', ClipboardList]]
+  ['number-requests', 'Number requests', PhoneCall], ['template-requests', 'Template requests', ClipboardList], ['developer', 'API keys', KeyRound]]
 const DETAIL = /^template-stats\/(\d+)$/
 
 export default function PortalApp() {
@@ -94,7 +97,7 @@ export default function PortalApp() {
         </div></div>
       </header>
       <main className={`main ${tab === 'chats' ? 'main-chat' : ''}`}>
-        {tab === 'dashboard' && <Home me={me} go={go} />}{tab === 'chats' && <Chat ep={EP} />}{tab === 'numbers' && <MyNumbers />}{tab === 'templates' && <MyTemplates />}{tab === 'flows' && <Flows scope="client" />}{tab === 'instagram' && <Instagram scope="client" />}
+        {tab === 'dashboard' && <Home me={me} go={go} />}{tab === 'chats' && <Chat ep={EP} />}{tab === 'numbers' && <MyNumbers />}{tab === 'templates' && <MyTemplates />}{tab === 'developer' && <ApiKeysPage scope="client" />}{tab === 'flows' && <Flows scope="client" />}{tab === 'instagram' && <Instagram scope="client" />}
         {tab === 'number-requests' && <NumberRequestsPage />}{tab === 'template-requests' && <TemplateRequestsPage />}{DETAIL.test(tab) && <TemplateDetail key={tab} id={tab.match(DETAIL)[1]} go={go} />}
       </main>
     </div>

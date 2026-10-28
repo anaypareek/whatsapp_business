@@ -102,6 +102,14 @@ class WhatsAppService
         ]))['data'] ?? [];
     }
 
+    /** GET /{waba-id}: health_status (can_send_message + per-entity errors), review and business verification status. */
+    public function getWabaHealth(?string $wabaId = null): array
+    {
+        $wabaId ??= Setting::get('waba_id');
+        if (! $wabaId) throw new RuntimeException('WABA ID is not configured (Settings).');
+        return $this->check($this->client()->get($this->baseUrl()."/{$wabaId}", ['fields' => 'health_status,account_review_status,business_verification_status']));
+    }
+
     public const PHONE_FIELDS = 'id,display_phone_number,verified_name,quality_rating,code_verification_status,status,name_status,platform_type,account_mode,messaging_limit_tier';
 
     /** GET /{phone-number-id}: registration/quality/name status of one number. */

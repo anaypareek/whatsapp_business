@@ -497,3 +497,37 @@ i.snt{background:var(--p)}i.rcv{background:var(--blue)}
 .ig-foot{padding:14px 20px;margin:0}
 .ig-scopes{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}.ig-scopes code{background:var(--p50);color:var(--p3);border:1px solid var(--p100);padding:3px 8px;border-radius:6px;font-size:12px}
 @media (max-width:700px){.ig-day{min-height:70px;padding:3px}.ig-ev em{display:none}.ig-accts{grid-template-columns:1fr}}
+
+/* ---- Template editor: toolbar, variables, emoji ---- */
+.editor-box{border:1px solid var(--line,#E5E7EB);border-radius:10px;background:#fff;overflow:visible}
+.editor-box:focus-within{border-color:var(--p,#EA580C);box-shadow:0 0 0 3px rgba(234,88,12,.12)}
+.editor-box textarea,.editor-box input{border:0!important;box-shadow:none!important;border-radius:0 0 10px 10px;width:100%;resize:vertical}
+.fmt-toolbar{display:flex;align-items:center;gap:2px;padding:4px 6px;border-bottom:1px solid var(--line,#E5E7EB);background:#FAFAF9;border-radius:10px 10px 0 0;flex-wrap:wrap}
+.tb-btn{min-width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;gap:4px;border:0;background:transparent;border-radius:6px;color:#44403C;cursor:pointer;font-size:13px;padding:0 6px}
+.tb-btn:hover:not(:disabled),.tb-btn.on{background:#F5F5F4;color:#1C1917}.tb-btn:disabled{opacity:.4;cursor:not-allowed}
+.tb-btn.wide{padding:0 10px;font-weight:600;color:var(--p3,#C2410C)}
+.fmt-toolbar .sep{width:1px;height:18px;background:#E7E5E4;margin:0 4px}
+.var-samples{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.wa-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em;background:rgba(0,0,0,.05);padding:0 3px;border-radius:3px}
+.emoji-wrap{position:relative;display:inline-flex}
+.emoji-toggle{border:0;background:transparent;cursor:pointer;color:inherit;display:inline-flex;align-items:center;justify-content:center}
+.emoji-pop{position:absolute;top:calc(100% + 6px);left:0;z-index:60;width:320px;background:#fff;border:1px solid #E7E5E4;border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.16);padding:8px;display:flex;flex-direction:column;gap:6px}
+.emoji-wrap.up .emoji-pop{top:auto;bottom:calc(100% + 6px)}
+.emoji-search{display:flex;align-items:center;gap:6px;padding:0 10px;border:1px solid #E7E5E4;border-radius:8px;color:#A8A29E}.emoji-search input{border:0!important;box-shadow:none!important;padding:6px 0!important;flex:1;font-size:13px;outline:0}
+.emoji-cats{display:flex;gap:2px;border-bottom:1px solid #F5F5F4;padding-bottom:4px;overflow-x:auto}
+.emoji-cats button{border:0;background:transparent;font-size:17px;padding:3px 5px;border-radius:6px;cursor:pointer;opacity:.6}
+.emoji-cats button.on,.emoji-cats button:hover{opacity:1;background:#F5F5F4}
+.emoji-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;max-height:220px;overflow-y:auto}
+.emoji-grid button{border:0;background:transparent;font-size:21px;line-height:1;padding:5px 0;border-radius:6px;cursor:pointer}
+.emoji-grid button:hover{background:#FFF7ED}
+.emoji-pop .emoji-label{font-size:11px;color:#78716C;text-transform:uppercase;letter-spacing:.04em;margin:2px 2px 0}
+
+/* ---- API keys / Use via API ---- */
+.api-warning{border-left:4px solid #D97706}.api-warning code{background:rgba(0,0,0,.06);padding:0 4px;border-radius:4px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid #E7E5E4;margin:12px 0 0}
+.tabs button{border:0;background:transparent;padding:8px 12px;cursor:pointer;font-weight:500;color:#78716C;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button.on{color:var(--p3,#C2410C);border-bottom-color:var(--p,#EA580C)}
+.code-wrap{position:relative;margin:10px 0}.code-wrap .code{max-height:380px;overflow:auto;padding-top:38px}
+.code-copy{position:absolute;top:8px;right:8px;z-index:1}
+tr.dim td{opacity:.55}
+.waba-banner{border-left:5px solid #DC2626;margin-bottom:16px}.waba-banner ul{margin:6px 0;padding-left:18px}.waba-banner li{margin:4px 0}

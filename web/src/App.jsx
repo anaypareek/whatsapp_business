@@ -11,7 +11,8 @@ import { NumberRequests, TemplateRequests } from './requests'
 import { Flows } from './flows'
 import { ErrorLogs } from './errorlogs'
 import { Instagram } from './instagram'
-import { Users, Numbers, SendMessage, Chat, AutoReplies, Settings, ApiKeys } from './pages'
+import { Users, Numbers, SendMessage, Chat, AutoReplies, Settings } from './pages'
+import { ApiKeysPage } from './apikeys'
 
 const NAV = [
   { group: 'Overview', items: [['dashboard', 'Dashboard', LayoutDashboard]] },
@@ -19,7 +20,7 @@ const NAV = [
   { group: 'Requests', items: [['number-requests', 'Number Requests', PhoneCall, true], ['template-requests', 'Template Requests', ClipboardList, true]] },
   { group: 'Setup', items: [['clients', 'Clients', Briefcase, true], ['numbers', 'Number Master', Phone], ['users', 'Users', UsersIcon, true], ['keys', 'API Keys', KeyRound, true], ['settings', 'Settings', SettingsIcon, true], ['error-logs', 'Error Logs', Bug, true]] },
 ]
-const PAGES = { 'error-logs': ErrorLogs, flows: () => <Flows scope="admin" />, instagram: () => <Instagram scope="admin" />, 'number-requests': NumberRequests, 'template-requests': TemplateRequests, clients: Clients, dashboard: Dashboard, chat: Chat, send: SendMessage, templates: Templates, numbers: Numbers, rules: AutoReplies, users: Users, keys: ApiKeys, settings: Settings }
+const PAGES = { 'error-logs': ErrorLogs, flows: () => <Flows scope="admin" />, instagram: () => <Instagram scope="admin" />, 'number-requests': NumberRequests, 'template-requests': TemplateRequests, clients: Clients, dashboard: Dashboard, chat: Chat, send: SendMessage, templates: Templates, numbers: Numbers, rules: AutoReplies, users: Users, keys: () => <ApiKeysPage scope="admin" />, settings: Settings }
 const TITLES = Object.fromEntries(NAV.flatMap((g) => g.items.map(([k, l]) => [k, l])))
 
 export default function App() {

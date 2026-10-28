@@ -17,7 +17,11 @@ Route::post('/client-errors', [Api\ErrorLogController::class, 'report'])->middle
 // Instagram OAuth redirect target (public; the one-time state in the cache says who is connecting)
 Route::get('/instagram/callback', [Api\InstagramController::class, 'callback'])->middleware('throttle:30,1');
 
-Route::post('/v1/messages/send', Api\ExternalSendController::class)->middleware([ApiKeyAuth::class, 'throttle:120,1']);
+// External API (server-to-server, API key in header; per-key rate limit + allowlists + logging in ApiKeyAuth)
+Route::middleware(['throttle:600,1', ApiKeyAuth::class])->prefix('v1')->group(function () {
+    Route::post('/messages/send', Api\ExternalSendController::class);
+    Route::post('/templates/send', Api\TemplateSendController::class);
+});
 
 // ---- Client portal ----
 Route::post('/client/auth/login', [Api\ClientPortalController::class, 'login'])->middleware('throttle:10,1');
@@ -82,11 +86,15 @@ Route::middleware(['auth:sanctum', EnsureClient::class])->prefix('client')->grou
     Route::get('/flows/{flow}/stats', [Api\FlowController::class, 'stats'])->whereNumber('flow');
     Route::get('/stats', [Api\ClientPortalController::class, 'stats']);
     Route::get('/stats/templates/{template}', [Api\ClientPortalController::class, 'templateSends'])->whereNumber('template');
+    Route::get('/api-keys/logs', [Api\ApiKeyController::class, 'logs']);
+    Route::apiResource('api-keys', Api\ApiKeyController::class)->only(['index', 'store', 'update', 'destroy'])->parameters(['api-keys' => 'apiKey']);
 });
 
 // ---- Staff / admin portal (tokens must belong to a User) ----
 Route::middleware(['auth:sanctum', EnsureStaff::class])->group(function () {
     Route::get('/dashboard', Api\DashboardController::class);
+    Route::get('/waba-health', [Api\SettingsController::class, 'health']);
+    Route::post('/waba-health/refresh', [Api\SettingsController::class, 'refreshHealth'])->middleware('throttle:20,1');
     Route::get('/auth/me', [Api\AuthController::class, 'me']);
     Route::post('/auth/logout', [Api\AuthController::class, 'logout']);
 
@@ -170,6 +178,7 @@ Route::middleware(['auth:sanctum', EnsureStaff::class])->group(function () {
         Route::apiResource('users', Api\UserController::class)->only(['index', 'store', 'destroy']);
         Route::get('/settings', [Api\SettingsController::class, 'show']);
         Route::put('/settings', [Api\SettingsController::class, 'update']);
-        Route::apiResource('api-keys', Api\ApiKeyController::class)->only(['index', 'store', 'destroy'])->parameters(['api-keys' => 'apiKey']);
+        Route::get('/api-keys/logs', [Api\ApiKeyController::class, 'logs']);
+        Route::apiResource('api-keys', Api\ApiKeyController::class)->only(['index', 'store', 'update', 'destroy'])->parameters(['api-keys' => 'apiKey']);
     });
 });

@@ -31,10 +31,13 @@ class ExternalSendController extends Controller
             'header_param' => 'nullable|string|max:2000', 'button_params' => 'nullable|array', 'button_params.*' => 'nullable|string|max:2000',
             'media_url' => 'nullable|url', 'file' => MessageController::FILE_RULE,
         ]);
+        $key = $r->attributes->get('api_key');
         $phone = PhoneNumber::resolve($d['from']);
         if (! $phone) return response()->json(['message' => 'Unknown sender number. Use the phone_number_id or display number from Number Master.'], 422);
+        if ($key && ! $key->canUsePhone($phone)) return response()->json(['message' => 'This API key cannot send from that number.', 'error_code' => 'NUMBER_NOT_ALLOWED'], 403);
         if (! empty($d['template'])) {
             $q = MessageTemplate::where('name', $d['template']);
+            if ($key?->client_id) $q->where('client_id', $key->client_id);
             if (! empty($d['language'])) $q->where('language', $d['language']);
             $tpls = $q->get();
             if ($tpls->isEmpty()) return response()->json(['message' => "Template '{$d['template']}'".(! empty($d['language']) ? " ({$d['language']})" : '').' not found. Sync templates in the portal.'], 422);

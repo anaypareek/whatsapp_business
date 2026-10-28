@@ -1,6 +1,9 @@
 <?php
 
 return [
+    // External API (api/v1/*): per-key default rate limit; require_https null = production only
+    'api' => ['rate_limit' => (int) env('API_RATE_LIMIT', 60), 'require_https' => env('API_REQUIRE_HTTPS')],
+
 
     /*
     |--------------------------------------------------------------------------

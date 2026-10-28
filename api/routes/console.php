@@ -33,3 +33,15 @@ Artisan::command('instagram:cleanup {--days=7}', function () {
 \Illuminate\Support\Facades\Schedule::command('instagram:publish')->everyMinute()->withoutOverlapping(10);
 \Illuminate\Support\Facades\Schedule::command('instagram:check-tokens')->dailyAt('03:30')->withoutOverlapping();
 \Illuminate\Support\Facades\Schedule::command('instagram:cleanup')->dailyAt('04:00')->withoutOverlapping();
+
+Artisan::command('api-logs:prune {--days=30}', function () {
+    $n = \App\Models\ApiRequestLog::where('created_at', '<', now()->subDays((int) $this->option('days')))->delete();
+    $this->info("Pruned {$n} API request log rows.");
+})->purpose('Delete API request logs older than N days');
+\Illuminate\Support\Facades\Schedule::command('api-logs:prune')->daily();
+
+Artisan::command('waba:health', function () {
+    $h = \App\Services\WabaHealth::refresh();
+    $this->info('can_send_message: '.($h['can_send_message'] ?? 'unknown').($h['fetch_error'] ? ' (fetch error: '.$h['fetch_error'].')' : ''));
+})->purpose('Refresh the cached WABA health status from Meta');
+\Illuminate\Support\Facades\Schedule::command('waba:health')->dailyAt('03:30');

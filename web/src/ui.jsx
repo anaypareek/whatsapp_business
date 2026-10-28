@@ -78,7 +78,7 @@ export const useToast = () => useContext(ToastCtx)
 /** Load JSON from the API with loading flag. */
 export function useLoad(path, deps = []) {
   const [data, setData] = useState(null); const [loading, setLoading] = useState(true); const toast = useToast()
-  const reload = useCallback(() => api(path).then(setData).catch((e) => toast?.error(e.message)).finally(() => setLoading(false)), [path, ...deps]) // eslint-disable-line
+  const reload = useCallback(() => (path ? api(path) : Promise.resolve([])).then(setData).catch((e) => toast?.error(e.message)).finally(() => setLoading(false)), [path, ...deps]) // eslint-disable-line
   useEffect(() => { setLoading(true); reload() }, [reload])
   return [data ?? [], reload, loading, setData]
 }

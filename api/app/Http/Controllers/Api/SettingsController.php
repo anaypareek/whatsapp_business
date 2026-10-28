@@ -19,6 +19,10 @@ class SettingsController extends Controller
         $out['graph_version'] = config('services.whatsapp.graph_version');
         return $out;
     }
+    /** GET /waba-health (cached); POST /waba-health/refresh (Settings → Test connection). */
+    public function health() { return response()->json(\App\Services\WabaHealth::get() ?? ['can_send_message' => null, 'entities' => [], 'blocked' => false, 'checked_at' => null]); }
+    public function refreshHealth() { return \App\Services\WabaHealth::refresh(); }
+
     public function update(Request $r)
     {
         $d = $r->validate(collect(Setting::KEYS)->mapWithKeys(fn ($k) => [$k => 'nullable|string|max:2000'])->all());
@@ -27,6 +31,7 @@ class SettingsController extends Controller
             if (in_array($k, Setting::SECRET) && ($v === null || $v === '' || str_starts_with($v, '••••'))) continue;
             Setting::put($k, $v);
         }
+        if (Setting::get('waba_id') && Setting::get('access_token')) \App\Services\WabaHealth::refreshQuietly();
         return $this->show();
     }
 }

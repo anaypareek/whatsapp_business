@@ -103,6 +103,7 @@ class TemplateController extends Controller
     public function sync(WhatsAppService $wa)
     {
         try { $remote = $wa->listTemplates(); } catch (Throwable $e) { return $this->fail($e); }
+        \App\Services\WabaHealth::refreshQuietly();
         $waba = Setting::get('waba_id');
         [$samples, $own] = collect($remote)->partition(fn ($t) => MessageTemplate::isSample($t['name'] ?? ''));
         $ids = $own->map(fn ($t) => MessageTemplate::fromMeta($t, $waba)->id)->values();

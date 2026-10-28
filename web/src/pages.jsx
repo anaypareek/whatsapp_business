@@ -1,3 +1,5 @@
+import { WabaHealthBanner } from './apikeys'
+import { EmojiButton, editAt } from './editor-tools'
 import { InstagramSettings } from './instagram-settings'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Users as UsersIcon, UserPlus, Trash2, Phone, Plus, RefreshCw, Pencil, ShieldCheck, Send, Paperclip, X, FileText, Image as ImageIcon, Search,
@@ -70,6 +72,7 @@ export function Numbers({ user }) {
   const pending = rows.filter((n) => n.status && n.status !== 'CONNECTED')
   return (<div className="page">
     <PageHeader icon={Phone} title="Number Master" subtitle="WhatsApp phone numbers linked to your WABA"><Button icon={RefreshCw} onClick={sync}>Sync from Meta</Button></PageHeader>
+    <WabaHealthBanner />
     {pending.length > 0 && <div className="alert warn reg-banner"><AlertCircle size={18} /><div>
       <b>{pending.length === 1 ? `${pending[0].display_number} is ${pending[0].status}` : `${pending.length} numbers are not connected`}: messages from {pending.length === 1 ? 'it' : 'them'} will fail with “(#133010) Account not registered”.</b>
       <div>A number must be registered with the WhatsApp Cloud API before it can send. {user.is_admin ? <>Click <b>Register</b> on the number and enter a 6-digit PIN (the number's two-step verification PIN).</> : 'Ask an admin to register it.'} Use <b>Refresh status</b> to re-check with Meta.</div></div></div>}
@@ -125,7 +128,8 @@ export function Numbers({ user }) {
 function Composer({ numbers, fixedNumber, fixedTo, onSent, compact, sendPath = '/messages/send' }) {
   const [from, setFrom] = useState(''); const [to, setTo] = useState(''); const [text, setText] = useState('')
   const [file, setFile] = useState(null); const [busy, setBusy] = useState(false); const toast = useToast()
-  const fileRef = useRef()
+  const fileRef = useRef(); const textRef = useRef()
+  const addEmoji = (em) => editAt(textRef, text, setText, (v, a, b) => ({ text: v.slice(0, a) + em + v.slice(b), start: a + em.length, end: a + em.length }))
   const clearFile = () => { setFile(null); if (fileRef.current) fileRef.current.value = '' }
   const send = async (e) => {
     e?.preventDefault(); if (!text && !file) return; setBusy(true)
@@ -139,9 +143,9 @@ function Composer({ numbers, fixedNumber, fixedTo, onSent, compact, sendPath = '
   if (compact) return (<form className="composer" onSubmit={send}>
     {chip && <div className="composer-file">{chip}</div>}
     <div className="composer-row">
-      <button type="button" className="icon-btn" title="Emoji" onClick={() => setText(text + '🙂')}><Smile size={20} /></button>
+      <EmojiButton up className="icon-btn" size={20} onPick={addEmoji} />
       <label className="icon-btn" title="Attach image or file"><Paperclip size={20} /><input ref={fileRef} type="file" hidden onChange={(e) => setFile(e.target.files[0] || null)} /></label>
-      <input className="composer-input" placeholder="Type a message" value={text} onChange={(e) => setText(e.target.value)} />
+      <input ref={textRef} className="composer-input" placeholder="Type a message" value={text} onChange={(e) => setText(e.target.value)} />
       <Button type="submit" variant="primary" className="send-btn" icon={Send} loading={busy} disabled={!text && !file} />
     </div></form>)
   return (<form className="form" onSubmit={send}>
@@ -150,7 +154,7 @@ function Composer({ numbers, fixedNumber, fixedTo, onSent, compact, sendPath = '
         {numbers.map((n) => <option key={n.id} value={n.id}>{n.name ? `${n.name} — ` : ''}{n.display_number}</option>)}</select></Field>
       <Field label="Recipient" hint="With country code, e.g. 919876543210" icon={Hash}><input value={to} onChange={(e) => setTo(e.target.value)} required /></Field>
     </div>
-    <Field label="Message / caption"><textarea rows={6} placeholder="Write your message…" value={text} onChange={(e) => setText(e.target.value)} /></Field>
+    <Field label="Message / caption"><div className="editor-box"><div className="fmt-toolbar"><EmojiButton onPick={addEmoji} className="tb-btn" /></div><textarea ref={textRef} rows={6} placeholder="Write your message…" value={text} onChange={(e) => setText(e.target.value)} /></div></Field>
     <div className="row between">
       <div className="row"><label className="btn btn-secondary"><Paperclip size={16} /><span>Attach image / file</span><input ref={fileRef} type="file" hidden onChange={(e) => setFile(e.target.files[0] || null)} /></label>{chip}</div>
       <Button type="submit" variant="primary" icon={Send} loading={busy} disabled={!text && !file}>Send message</Button>
@@ -306,7 +310,15 @@ export function AutoReplies() {
 }
 
 // ---------------- Settings ----------------
+function HealthCheckButton() {
+  const toast = useToast(); const [busy, setBusy] = useState(false)
+  const run = async () => { setBusy(true); try { const h = await api('/waba-health/refresh', { method: 'POST' }); if (h.fetch_error) toast.error(`Health check failed: ${h.fetch_error}`); else if (h.blocked) toast.error(`Meta reports can_send_message = ${h.can_send_message}`); else toast.success(`WABA healthy (${h.can_send_message || 'AVAILABLE'})`); window.dispatchEvent(new Event('waba-health')) } catch (e) { toast.error(e.message) } finally { setBusy(false) } }
+  return <Button icon={RefreshCw} loading={busy} onClick={run}>Check WABA health</Button>
+}
+
 export function Settings() {
+  const [healthTick, setHealthTick] = useState(0)
+  useEffect(() => { const f = () => setHealthTick((t) => t + 1); window.addEventListener('waba-health', f); return () => window.removeEventListener('waba-health', f) }, [])
   const [s, setS] = useState(null); const [busy, setBusy] = useState(false); const toast = useToast()
   useEffect(() => { api('/settings').then(setS).catch((e) => toast.error(e.message)) }, []) // eslint-disable-line
   const save = async (e) => {
@@ -319,7 +331,8 @@ export function Settings() {
     <input type={secret ? 'password' : 'text'} value={secret && s[k]?.startsWith('••••') ? '' : s[k]} onChange={(e) => setS({ ...s, [k]: e.target.value })} /></Field>)
   const hook = s ? `${location.origin}/api/webhook/whatsapp` : ''
   return (<div className="page">
-    <PageHeader icon={SettingsIcon} title="Settings" subtitle="Meta WhatsApp Cloud API credentials, stored encrypted" />
+    <PageHeader icon={SettingsIcon} title="Settings" subtitle="Meta WhatsApp Cloud API credentials, stored encrypted"><HealthCheckButton /></PageHeader>
+    <WabaHealthBanner key={healthTick} />
     {!s ? <div className="grid-2-1"><Card><Skeleton h={320} /></Card><Card><Skeleton h={200} /></Card></div> :
       <div className="grid-2-1">
         <Card title="Meta app credentials" icon={Lock}>
@@ -393,32 +406,3 @@ function PushSettings() {
 }
 
 // ---------------- API Keys ----------------
-export function ApiKeys() {
-  const [rows, reload, loading] = useLoad('/api-keys'); const toast = useToast()
-  const [name, setName] = useState(''); const [plain, setPlain] = useState(''); const [busy, setBusy] = useState(false)
-  const add = async (e) => { e.preventDefault(); setBusy(true); try { const r = await api('/api-keys', { method: 'POST', body: { name } }); setPlain(r.plain_key); setName(''); toast.success('API key generated'); reload() } catch (e) { toast.error(e.message) } finally { setBusy(false) } }
-  const del = async (k) => { if (!confirm(`Revoke ${k.name}?`)) return; try { await api(`/api-keys/${k.id}`, { method: 'DELETE' }); toast.success('Key revoked'); reload() } catch (e) { toast.error(e.message) } }
-  const copy = (t) => navigator.clipboard?.writeText(t).then(() => toast.success('Copied'))
-  const curl = `curl -X POST ${location.origin}/api/v1/messages/send \\\n  -H "Authorization: Bearer <API_KEY>" -H "Accept: application/json" \\\n  -H "Content-Type: application/json" \\\n  -d '{"from":"<phone_number_id>","to":"919812345678","text":"New order #1001"}'`
-  return (<div className="page">
-    <PageHeader icon={KeyRound} title="API Keys" subtitle="Bearer keys for POST /api/v1/messages/send (e.g. website order alerts)" />
-    <div className="grid-form">
-      <div className="stack-cards">
-        <Card title="Generate key" icon={Plus}>
-          <form className="form" onSubmit={add}><Field label="Key name"><input placeholder="e.g. Website orders" value={name} onChange={(e) => setName(e.target.value)} required /></Field>
-            <Button type="submit" variant="primary" icon={KeyRound} loading={busy}>Generate key</Button></form>
-          {plain && <div className="alert success"><b>Copy now, it won't be shown again:</b><div className="copy-row"><code className="grow">{plain}</code><Button size="sm" icon={Copy} onClick={() => copy(plain)} /></div></div>}
-        </Card>
-        <Card title="Example" icon={FileText}><pre className="code">{curl}</pre></Card>
-      </div>
-      <Card title={`Keys (${rows.length})`} pad={false}>
-        <div className="table-wrap"><table className="table"><thead><tr><th>Name</th><th>Prefix</th><th>Created</th><th>Last used</th><th /></tr></thead>
-          {loading ? <TableSkeleton cols={5} /> : rows.length ? <tbody>{rows.map((k) => <tr key={k.id}><td><div className="cell-user"><span className="ico-tile"><KeyRound size={16} /></span><b>{k.name}</b></div></td>
-            <td><code>{k.prefix}…</code></td><td className="muted">{fmtTime(k.created_at)}</td><td>{k.last_used_at ? fmtTime(k.last_used_at) : <span className="muted">Never</span>}</td>
-            <td className="right"><Button size="sm" variant="ghost-danger" icon={Trash2} onClick={() => del(k)}>Revoke</Button></td></tr>)}</tbody>
-            : <tbody><tr><td colSpan={5}><Empty icon={KeyRound} title="No API keys">Generate one to let your store send WhatsApp alerts.</Empty></td></tr></tbody>}
-        </table></div>
-      </Card>
-    </div>
-  </div>)
-}
