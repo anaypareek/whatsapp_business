@@ -4,6 +4,16 @@ import '../config.dart';
 import '../session.dart';
 import '../theme.dart';
 
+/// The real reason a sign-in failed: server message + HTTP status, network error text, or the exception itself.
+String loginErrorText(Object e) {
+  if (e is ApiException) {
+    if (e.isNetwork) return e.message;
+    return '${e.message} (HTTP ${e.status})';
+  }
+  final s = e.toString().trim();
+  return 'Could not sign in: ${s.isEmpty ? e.runtimeType : s}';
+}
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, required this.session, required this.onLoggedIn});
   final Session session; final Future<void> Function() onLoggedIn;
@@ -24,9 +34,9 @@ class _LoginScreenState extends State<LoginScreen> {
       await widget.session.login(_email.text, _pass.text);
       await widget.onLoggedIn();
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      if (mounted) setState(() => _error = loginErrorText(e));
     } catch (e) {
-      setState(() => _error = 'Could not sign in. Please try again.');
+      if (mounted) setState(() => _error = loginErrorText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -51,14 +61,14 @@ class _LoginScreenState extends State<LoginScreen> {
                 const Text('Sign in with your admin panel account', textAlign: TextAlign.center, style: TextStyle(color: Brand.muted)),
                 const SizedBox(height: 32),
                 TextFormField(
-                  key: const Key('email'), controller: _email, keyboardType: TextInputType.emailAddress, autofillHints: const [AutofillHints.email],
+                  key: const Key('email'), controller: _email, keyboardType: TextInputType.emailAddress, autocorrect: false, enableSuggestions: false, textCapitalization: TextCapitalization.none, autofillHints: const [AutofillHints.email],
                   textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.mail_outline)),
                   validator: (v) => (v == null || !v.contains('@')) ? 'Enter your email' : null,
                 ),
                 const SizedBox(height: 14),
                 TextFormField(
-                  key: const Key('password'), controller: _pass, obscureText: _hide, autofillHints: const [AutofillHints.password],
+                  key: const Key('password'), controller: _pass, obscureText: _hide, autocorrect: false, enableSuggestions: false, textCapitalization: TextCapitalization.none, autofillHints: const [AutofillHints.password],
                   onFieldSubmitted: (_) => _submit(),
                   decoration: InputDecoration(labelText: 'Password', prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(icon: Icon(_hide ? Icons.visibility_outlined : Icons.visibility_off_outlined), onPressed: () => setState(() => _hide = !_hide))),

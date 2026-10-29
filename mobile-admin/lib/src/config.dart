@@ -4,7 +4,7 @@ class AppConfig {
   static const appName = 'WA Fineoutput Master';
   static const packageName = 'com.fineoutput.wabusiness.admin';
   static const apiBase = String.fromEnvironment('API_BASE', defaultValue: 'https://whatsappwork.fineoutput.com');
-  static const version = '1.0.0';
+  static const version = '1.0.1';
   // API surface (the Master app points these at the staff/admin endpoints).
   static const isAdmin = true;
   static const loginPath = '/auth/login';

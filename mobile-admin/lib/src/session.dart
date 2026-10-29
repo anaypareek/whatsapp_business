@@ -27,13 +27,44 @@ class Session extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Set when the token could not be saved to secure storage (the session then lasts until the app is closed).
+  String? storageWarning;
+
   Future<void> login(String email, String password) async {
     final r = await api.post(AppConfig.loginPath, {'email': email.trim(), 'password': password, 'device_name': 'Android app'});
+    if (r is! Map || r['token'] is! String || (r['token'] as String).isEmpty) {
+      throw ApiException(200, 'Unexpected server response: no token returned');
+    }
+    final u = r['client'] ?? r['user'];
+    if (AppConfig.isAdmin && u is Map && u['is_admin'] != true && u['is_admin'] != 1) {
+      throw ApiException(403, 'This account is not an admin. Use the WA Business Fineoutput client app instead.');
+    }
     api.token = r['token'] as String;
-    client = Map<String, dynamic>.from(r['client'] ?? r['user'] ?? {});
-    await _storage.write(key: 'token', value: api.token);
-    (await SharedPreferences.getInstance()).setString('client', jsonEncode({'id': client!['id'], 'name': client!['name'], 'email': client!['email'], 'company': client!['company']}));
+    client = u is Map ? Map<String, dynamic>.from(u) : <String, dynamic>{};
+    storageWarning = await _persist();
     notifyListeners();
+  }
+
+  /// A successful server login must never be turned into a failed sign-in by local storage problems
+  /// (Android Keystore errors after a restore / OEM keystore bugs). Retry once after wiping the store,
+  /// then fall back to an in-memory session and report why.
+  Future<String?> _persist() async {
+    String? warn;
+    try {
+      await _storage.write(key: 'token', value: api.token);
+    } catch (e) {
+      try {
+        await _storage.deleteAll();
+        await _storage.write(key: 'token', value: api.token);
+      } catch (e2) {
+        warn = 'Signed in, but this phone could not save the login securely ($e2). You will need to sign in again after closing the app.';
+        debugPrint('session: secure storage write failed: $e / $e2');
+      }
+    }
+    try {
+      await (await SharedPreferences.getInstance()).setString('client', jsonEncode({'id': client!['id'], 'name': client!['name'], 'email': client!['email'], 'company': client!['company']}));
+    } catch (e) { debugPrint('session: prefs write failed: $e'); }
+    return warn;
   }
 
   /// [beforeRevoke] runs while the token is still valid (used to unregister the push token).
