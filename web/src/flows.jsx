@@ -5,6 +5,7 @@ import { ReactFlow, ReactFlowProvider, Background, Controls, MiniMap, Handle, Po
 import '@xyflow/react/dist/style.css'
 import { Workflow, MessageSquare, HelpCircle, GitBranch, Webhook, Zap, Phone, Plus, ArrowLeft, Save, Copy, Trash2, Pencil, Play, RotateCcw, Send, X, Image as ImageIcon, FileText, List, Search, CheckCircle2, Users, Activity, Smartphone, Settings2 } from 'lucide-react'
 import { api, fmtTime } from './api'
+import { RichText } from './editor-tools'
 import { Button, Card, PageHeader, Field, TableSkeleton, Empty, Badge, Toggle, useToast, useLoad, Skeleton } from './ui'
 
 export const MAX_STEPS = 10
@@ -67,13 +68,13 @@ function NodeEditor({ node, update, remove }) {
     <div className="fe-title" style={{ '--nc': t.color }}><span className="fn-ico"><Icon size={14} /></span><b>{t.label}</b>
       <Button size="sm" variant="ghost-danger" icon={Trash2} onClick={remove} title="Delete step">Delete</Button></div>
     {node.type === 'message' && <div className="form">
-      <Field label={`Message (${(d.text || '').length}/4096)`} hint="*bold* _italic_ ~strike~"><textarea rows={5} maxLength={4096} value={d.text} onChange={(e) => set({ text: e.target.value })} /></Field>
+      <Field label={`Message (${(d.text || '').length}/4096)`} hint="*bold* _italic_ ~strike~"><RichText rows={5} maxLength={4096} value={d.text} onChange={(t) => set({ text: t })} /></Field>
       <Field label="Media"><div className="seg">{['none', 'image', 'document'].map((m) => <button key={m} type="button" className={d.media_type === m ? 'on' : ''} onClick={() => set({ media_type: m })}>{m}</button>)}</div></Field>
       {d.media_type !== 'none' && <><Field label={`${d.media_type === 'image' ? 'Image' : 'Document'} URL`} hint="Public https link (JPG/PNG or PDF)"><input value={d.media_url || ''} onChange={(e) => set({ media_url: e.target.value })} placeholder="https://…" /></Field>
         {d.media_type === 'document' && <Field label="File name (optional)"><input value={d.filename || ''} onChange={(e) => set({ filename: e.target.value })} /></Field>}</>}
     </div>}
     {node.type === 'question' && <div className="form">
-      <Field label={`Question (${(d.text || '').length}/1024)`}><textarea rows={4} maxLength={1024} value={d.text} onChange={(e) => set({ text: e.target.value })} /></Field>
+      <Field label={`Question (${(d.text || '').length}/1024)`}><RichText rows={4} maxLength={1024} value={d.text} onChange={(t) => set({ text: t })} /></Field>
       <div className="row between"><span className="field-label">Options ({d.options.length}/10)</span><Badge tone={d.options.length <= 3 ? 'green' : 'blue'}>{d.options.length <= 3 ? 'Reply buttons' : 'List message'}</Badge></div>
       {d.options.map((o, i) => <div key={o.id} className="opt-edit">
         <span className="opt-n">{i + 1}</span>
@@ -84,7 +85,7 @@ function NodeEditor({ node, update, remove }) {
       <p className="muted small">Up to 3 options go as WhatsApp reply buttons (20 chars), 4–10 as a list message (24 chars). Each option has its own branch on the canvas.</p>
       {d.options.length > 3 && <Field label="List button text"><input maxLength={20} value={d.list_button || ''} placeholder="Choose an option" onChange={(e) => set({ list_button: e.target.value })} /></Field>}
       <Field label="Footer (optional)"><input maxLength={60} value={d.footer || ''} onChange={(e) => set({ footer: e.target.value })} /></Field>
-      <Field label="If the reply doesn't match" hint="Sent before the question is asked again"><input maxLength={500} value={d.retry_text || ''} placeholder="Sorry, I didn't get that. Please choose one of the options." onChange={(e) => set({ retry_text: e.target.value })} /></Field>
+      <Field label="If the reply doesn't match" hint="Sent before the question is asked again"><RichText as="input" format={false} maxLength={500} value={d.retry_text || ''} placeholder="Sorry, I didn't get that. Please choose one of the options." onChange={(t) => set({ retry_text: t })} /></Field>
     </div>}
     {node.type === 'condition' && <div className="form">
       <Field label="Match the contact's last reply"><select value={d.match_type} onChange={(e) => set({ match_type: e.target.value })}>{Object.entries(MATCH).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>

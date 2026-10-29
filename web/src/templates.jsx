@@ -80,7 +80,13 @@ export function TemplateForm({ initial, editing, onDone, onCancel, submit, title
     if (f.body.examples.slice(0, n).some((x) => !String(x || '').trim())) { toast.error('Add a sample value for every body variable.'); return }
     setBusy(true)
     const body = { ...f, header: f.header.format === 'NONE' ? null : f.header, body: { text: f.body.text, examples: f.body.examples.slice(0, n) }, footer: f.footer || null, ...(clients ? { client_id: clientId || null } : {}) }
-    try { if (submit) await submit(body); else await api(editing ? `/templates/${editing.id}` : '/templates', { method: editing ? 'PUT' : 'POST', body }); onDone() }
+    try { if (submit) await submit(body); else { const res = await api(editing ? `/templates/${editing.id}` : '/templates', { method: editing ? 'PUT' : 'POST', body }); onDone(res) } }
+    catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+  // local-only: saves the client assignment in the portal DB, never calls Meta
+  const saveAssign = async () => {
+    setBusy(true)
+    try { await api(`/templates/${editing.id}/client`, { method: 'PUT', body: { client_id: clientId || null } }); onDone({ meta_submitted: false, assign_only: true }) }
     catch (e) { toast.error(e.message) } finally { setBusy(false) }
   }
   return (<div className="page">
@@ -120,7 +126,9 @@ export function TemplateForm({ initial, editing, onDone, onCancel, submit, title
             {b.type === 'URL' && countVars(b.url) > 0 && <input placeholder="Example full URL" value={b.example} onChange={(e) => setBtn(i, { example: e.target.value })} />}
             {b.type === 'PHONE_NUMBER' && <input placeholder="+919876543210" value={b.phone_number} onChange={(e) => setBtn(i, { phone_number: e.target.value })} />}
             <Button size="sm" variant="ghost-danger" icon={Trash2} onClick={() => set({ buttons: f.buttons.filter((_, j) => j !== i) })} /></div>)}
-          <div><Button type="submit" variant="primary" icon={Send} loading={busy}>{submitLabel || (editing ? 'Submit edit to Meta' : 'Submit for review')}</Button></div>
+          <div className="row"><Button type="submit" variant="primary" icon={Send} loading={busy}>{submitLabel || (editing ? 'Save / submit edit to Meta' : 'Submit for review')}</Button>
+            {editing && clients && !submit && <Button icon={Briefcase} loading={busy} onClick={saveAssign} title="Saves only the client assignment in the portal. Nothing is sent to Meta.">Save (assign only)</Button>}</div>
+          {editing && clients && !submit && <p className="muted small">Only content changes (header, body, footer, buttons, category) are sent to Meta. If you only change the client, it's saved directly in the portal.</p>}
         </form>
       </Card>
       <div className="sticky"><Card title="Live preview" icon={Eye}><Preview form={f} /></Card></div>
@@ -148,7 +156,7 @@ export function Templates() {
       try { const r = await api(`/templates/${t.id}?local_only=1`, { method: 'DELETE' }); done(r?.message || 'Removed from this portal') } catch (e2) { toast.error(e2.message) }
     }
   }
-  const edit = (t) => { if (!t.edit_check.allowed) { toast.error(`Edit not allowed: ${t.edit_check.reason}`); return } setMode({ edit: t }) }
+  const edit = (t) => { if (!t.edit_check.allowed) toast.error(`Content edits are locked (${t.edit_check.reason}); you can still change the client.`); setMode({ edit: t }) }
   const view = async (t) => { try { setMode({ view: await api(`/templates/${t.id}`) }) } catch (e) { toast.error(e.message) } }
   const all = rows || []
   const langs = useMemo(() => [...new Set(all.map((r) => r.language))], [rows]) // eslint-disable-line
@@ -165,7 +173,7 @@ export function Templates() {
   }
 
   if (mode?.new || mode?.edit) return <TemplateForm clients={clients} initial={mode.edit ? toForm(mode.edit) : blankForm()} editing={mode.edit}
-    onDone={() => { toast.success(mode.edit ? 'Edit submitted; template is back in review' : 'Template submitted to Meta for review'); setMode(null); load() }} onCancel={() => setMode(null)} />
+    onDone={(res) => { toast.success(!mode.edit ? 'Template submitted to Meta for review' : res?.meta_submitted === false ? 'Saved (not sent to Meta)' : 'Edit submitted; template is back in review'); setMode(null); load() }} onCancel={() => setMode(null)} />
 
   return (<div className="page">
     <PageHeader icon={FileText} title="Template Master" subtitle="Create, review and sync WhatsApp message templates">
@@ -212,7 +220,7 @@ export function Templates() {
         {mode.view.rejected_reason && <div className="alert error">Rejection reason: <b>{mode.view.rejected_reason}</b></div>}
         {!mode.view.edit_check.allowed && <div className="alert info"><Lock size={14} /> {mode.view.edit_check.reason}</div>}
         <Preview form={toForm(mode.view)} />
-        <div className="row"><Button size="sm" icon={Pencil} onClick={() => edit(mode.view)} disabled={!mode.view.edit_check.allowed}>Edit</Button></div>
+        <div className="row"><Button size="sm" icon={Pencil} onClick={() => edit(mode.view)}>Edit</Button></div>
         <Field label="Client" hint="Shown in that client's portal and counted on the Clients page"><ClientSelect clients={clients} value={mode.view.client_id ? String(mode.view.client_id) : ''}
           onChange={async (v) => { try { const t = await api(`/templates/${mode.view.id}/client`, { method: 'PUT', body: { client_id: v || null } }); setMode({ view: { ...mode.view, client_id: t.client_id, client: t.client } }); toast.success('Client updated'); load() } catch (e) { toast.error(e.message) } }} /></Field>
         <h4 className="sub-h"><History size={14} /> Status history</h4>
@@ -234,6 +242,12 @@ export function TemplateSender({ numbers }) {
   const send = async (e) => {
     e.preventDefault(); setBusy(true)
     try { const m = await api('/messages/send-template', { method: 'POST', body: { phone_number_id: from, to, template_id: tid, params: vals.slice(0, t?.body_variable_count || 0), header_param: hv || null, button_params: bv } }); toast.success(`Template sent${m.wamid ? '' : ` (${m.status})`}`) }
+    catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+  // local-only: saves the client assignment in the portal DB, never calls Meta
+  const saveAssign = async () => {
+    setBusy(true)
+    try { await api(`/templates/${editing.id}/client`, { method: 'PUT', body: { client_id: clientId || null } }); onDone({ meta_submitted: false, assign_only: true }) }
     catch (e) { toast.error(e.message) } finally { setBusy(false) }
   }
   return (<div className="grid-2-1">

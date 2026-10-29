@@ -83,15 +83,17 @@ class TemplateTest extends TestCase
         $this->auth()->putJson("/api/templates/{$t->id}", ['category' => 'MARKETING'] + $body)->assertStatus(422); // can't change approved category
         $this->auth()->putJson("/api/templates/{$t->id}", $body)->assertOk()->assertJsonPath('status', 'PENDING');
         Http::assertSent(fn (HttpRequest $r) => str_ends_with($r->url(), '/T1') && $r->method() === 'POST');
+        // later calls change the content (unchanged content is saved locally without Meta)
+        $body2 = ['body' => ['text' => 'Hi {{1}}, order {{2}} shipped!', 'examples' => ['A', 'B']]] + $body;
         // now PENDING -> not editable
-        $this->auth()->putJson("/api/templates/{$t->id}", $body)->assertStatus(422)->assertJsonPath('edit_check.allowed', false);
+        $this->auth()->putJson("/api/templates/{$t->id}", $body2)->assertStatus(422)->assertJsonPath('edit_check.allowed', false);
         // approved again, but edited within 24h
         $t->refresh()->update(['status' => 'APPROVED']);
-        $this->auth()->putJson("/api/templates/{$t->id}", $body)->assertStatus(422)->assertSee('once per 24 hours');
+        $this->auth()->putJson("/api/templates/{$t->id}", $body2)->assertStatus(422)->assertSee('once per 24 hours');
         // 10 edits in 30 days
         TemplateEdit::query()->update(['created_at' => now()->subDays(2)]);
         for ($i = 0; $i < 9; $i++) TemplateEdit::create(['message_template_id' => $t->id, 'status_at_edit' => 'APPROVED', 'created_at' => now()->subDays(3 + $i)]);
-        $this->auth()->putJson("/api/templates/{$t->id}", $body)->assertStatus(422)->assertSee('10 times in 30 days');
+        $this->auth()->putJson("/api/templates/{$t->id}", $body2)->assertStatus(422)->assertSee('10 times in 30 days');
         // rejected templates are editable regardless
         $r = MessageTemplate::where('meta_id', 'T2')->first();
         $this->assertTrue($r->edit_check['allowed']);

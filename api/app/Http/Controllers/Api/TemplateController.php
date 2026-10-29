@@ -42,16 +42,27 @@ class TemplateController extends Controller
         return response()->json($t->load('client:id,name,company'), 201);
     }
 
+    /**
+     * PUT /templates/{id}. Content (name/language/category/header/body/footer/buttons) is compared with the
+     * stored values server-side: if nothing Meta-relevant changed (e.g. only client_id), the change is saved
+     * locally with NO Meta API call and the template keeps its status. Only real content changes go to Meta.
+     */
     public function update(Request $r, MessageTemplate $template, WhatsAppService $wa)
     {
-        $check = $template->edit_check;
-        if (! $check['allowed']) return response()->json(['message' => $check['reason'], 'edit_check' => $check], 422);
         $d = $r->validate(TemplateBuilder::rules(true) + ['client_id' => 'nullable|exists:clients,id']);
         if (isset($d['name']) && $d['name'] !== $template->name || isset($d['language']) && $d['language'] !== $template->language) {
             return response()->json(['message' => 'Meta does not allow changing a template\'s name or language. Create a new template instead.'], 422);
         }
         $payload = ['components' => TemplateBuilder::components($d)];
-        if (isset($d['category']) && $d['category'] !== $template->category) {
+        $categoryChanged = isset($d['category']) && $d['category'] !== $template->category;
+        $contentChanged = $categoryChanged || self::canon($payload['components']) !== self::canon($template->components ?? []);
+        if (! $contentChanged) {
+            if ($r->has('client_id')) $template->update(['client_id' => $d['client_id'] ?? null]);
+            return $template->fresh()->load('client:id,name,company')->setAttribute('meta_submitted', false);
+        }
+        $check = $template->edit_check;
+        if (! $check['allowed']) return response()->json(['message' => $check['reason'], 'edit_check' => $check], 422);
+        if ($categoryChanged) {
             if ($template->status === 'APPROVED') return response()->json(['message' => 'The category of an APPROVED template cannot be changed.'], 422);
             $payload['category'] = $d['category'];
         }
@@ -61,7 +72,23 @@ class TemplateController extends Controller
         $template->update(['components' => $payload['components'], 'category' => $payload['category'] ?? $template->category,
             'status' => 'PENDING', 'rejected_reason' => null] // edited templates go back to review
             + ($r->has('client_id') ? ['client_id' => $d['client_id'] ?? null] : []));
-        return $template->fresh()->load('client:id,name,company');
+        return $template->fresh()->load('client:id,name,company')->setAttribute('meta_submitted', true);
+    }
+
+    /** Canonical form of template components for change detection: drops empty values, sorts keys, uppercases type/format. */
+    private static function canon($v)
+    {
+        if (! is_array($v)) return is_string($v) ? trim($v) : $v;
+        $out = [];
+        foreach ($v as $k => $x) {
+            $x = self::canon($x);
+            if ($x === null || $x === '' || $x === []) continue;
+            if (in_array($k, ['type', 'format'], true) && is_string($x)) $x = strtoupper($x);
+            $out[$k] = $x;
+        }
+        if (array_is_list($v)) return array_values($out);
+        ksort($out);
+        return $out;
     }
 
     /**

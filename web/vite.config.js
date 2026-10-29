@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
       server.middlewares.use((req, _res, next) => {
         const url = req.url.split('?')[0]
         if (url === adminBase || url.startsWith(`${adminBase}/`)) req.url = '/admin.html'
-        else if (/^\/(login|dashboard|chats|numbers|templates|flows|instagram)\/?$/.test(url)) req.url = '/index.html'
+        else if (/^\/(login|dashboard|chats|numbers|templates|flows|instagram|number-requests|template-requests|billing|developer|template-stats\/[0-9]+)\/?$/.test(url)) req.url = '/index.html'
         next()
       })
     },

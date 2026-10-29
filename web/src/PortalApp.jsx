@@ -9,6 +9,7 @@ import { ApiKeysPage, UseViaApiModal } from './apikeys'
 import { Chat } from './pages'
 import { UsageBilling, DueBadge } from './billing'
 import { Flows } from './flows'
+import { NavLink } from './editor-tools'
 import { Instagram } from './instagram'
 import { NumberRequestsPage, TemplateRequestsPage, StatsSection, TemplateDetail } from './portal-extra'
 
@@ -85,7 +86,7 @@ export default function PortalApp() {
   return (<div className={`layout ${navOpen ? 'nav-open' : ''}`}>
     <aside className="sidebar">
       <div className="logo"><span className="logo-mark"><MessageCircle size={20} /></span><div><b>WA Business Fineoutput Portal</b><small>Client portal</small></div></div>
-      <nav><div className="nav-group"><div className="nav-label">Menu</div>{NAV.map(([k, l, Icon]) => <button key={k} className={`nav-item ${tab === k || (k === 'dashboard' && DETAIL.test(tab)) ? 'active' : ''}`} onClick={() => go(k)}><Icon size={18} /><span>{l}</span></button>)}</div></nav>
+      <nav><div className="nav-group"><div className="nav-label">Menu</div>{NAV.map(([k, l, Icon]) => <NavLink key={k} href={`/${k}`} className={`nav-item ${tab === k || (k === 'dashboard' && DETAIL.test(tab)) ? 'active' : ''}`} onNavigate={() => go(k)}><Icon size={18} /><span>{l}</span></NavLink>)}</div></nav>
     </aside>
     <div className="scrim" onClick={() => setNavOpen(false)} />
     <div className="content">

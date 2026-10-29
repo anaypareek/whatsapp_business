@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { LayoutDashboard, MessagesSquare, Send, FileText, Phone, Bot, Users as UsersIcon, KeyRound, Settings as SettingsIcon, LogOut, Menu, ChevronDown, Bell, MessageCircle, Briefcase, PhoneCall, ClipboardList, Workflow, Bug, Camera, Wallet } from 'lucide-react'
 import { api, getToken, setToken } from './api'
 import { Spinner } from './ui'
+import { NavLink } from './editor-tools'
 import { ADMIN_BASE } from './config'
 import Login from './Login'
 import Dashboard from './Dashboard'
@@ -66,11 +67,11 @@ export default function App() {
         <div className="logo"><span className="logo-mark"><MessageCircle size={20} /></span><div><b>WA Business Fineoutput Portal</b><small>Admin panel</small></div></div>
         <nav>{NAV.map((g) => (<div key={g.group} className="nav-group"><div className="nav-label">{g.group}</div>
           {g.items.filter(([, , , admin]) => !admin || user.is_admin).map(([k, label, Icon]) => (
-            <button key={k} className={`nav-item ${tab === k ? 'active' : ''}`} onClick={() => go(k)}><Icon size={18} /><span>{label}</span>
+            <NavLink key={k} href={`${ADMIN_BASE}/${k}`} className={`nav-item ${tab === k ? 'active' : ''}`} onNavigate={() => go(k)}><Icon size={18} /><span>{label}</span>
               {k === 'chat' && unread > 0 && <em className="nav-badge">{unread}</em>}
               {k === 'number-requests' && pending.numbers > 0 && <em className="nav-badge" title="Pending">{pending.numbers}</em>}
               {k === 'template-requests' && pending.templates > 0 && <em className="nav-badge" title="Pending">{pending.templates}</em>}
-              {k === 'error-logs' && errCount > 0 && <em className="nav-badge" title="Unresolved errors">{errCount > 99 ? '99+' : errCount}</em>}</button>))}
+              {k === 'error-logs' && errCount > 0 && <em className="nav-badge" title="Unresolved errors">{errCount > 99 ? '99+' : errCount}</em>}</NavLink>))}
         </div>))}</nav>
         <div className="sidebar-foot"><div className="help-card"><b>Need the API?</b><small>Use API Keys to send order alerts from your store.</small>
           {user.is_admin && <button onClick={() => go('keys')}>Manage keys</button>}</div></div>

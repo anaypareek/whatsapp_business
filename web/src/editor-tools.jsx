@@ -66,3 +66,27 @@ export function FormatToolbar({ inputRef, value, onChange, onAddVariable, addVar
     {onAddVariable && <button type="button" className="tb-btn wide" disabled={addVarDisabled} onMouseDown={(e) => e.preventDefault()} onClick={onAddVariable}><Braces size={15} /> {addVarLabel}</button>}
   </div>)
 }
+
+/** Textarea (or input with as="input") with the same formatting toolbar + emoji picker used by the template editor.
+ *  onChange(text). Emoji/format inserts happen at the cursor position. */
+export function RichText({ value, onChange, as = 'textarea', format = true, ...props }) {
+  const ref = useRef(null)
+  const v = value || ''
+  const El = as
+  const ch = (t) => onChange(t)
+  return (<div className="rich-text">
+    {format ? <FormatToolbar inputRef={ref} value={v} onChange={ch} />
+      : <div className="fmt-toolbar"><EmojiButton className="tb-btn" size={15} onPick={(em) => editAt(ref, v, ch, (t, s, e) => insertAt(t, s, e, em))} /></div>}
+    <El ref={ref} value={v} onChange={(e) => onChange(e.target.value)} {...props} />
+  </div>)
+}
+
+/** Sidebar link: a real <a href> (right-click / middle-click / Ctrl-click open in a new tab),
+ *  plain left-click navigates in-app via onNavigate. */
+export function NavLink({ href, onNavigate, className, children, ...rest }) {
+  const click = (e) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+    e.preventDefault(); onNavigate()
+  }
+  return <a href={href} className={className} onClick={click} {...rest}>{children}</a>
+}

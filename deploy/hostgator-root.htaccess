@@ -51,7 +51,7 @@ RewriteRule ^wab-control-7x$ /wab-control-7x/ [R=302,L]
 RewriteRule ^wab-control-7x/ web/dist/admin.html [END]
 
 # Client portal at / (explicit routes only)
-RewriteRule ^(login|dashboard|chats|numbers|templates|number-requests|template-requests|template-stats/[0-9]+|flows|instagram)?/?$ web/dist/index.html [END]
+RewriteRule ^(login|dashboard|chats|numbers|templates|number-requests|template-requests|template-stats/[0-9]+|flows|instagram|billing|developer)?/?$ web/dist/index.html [END]
 
 # Everything else (including /admin) -> 404
 RewriteRule ^ - [R=404,L]

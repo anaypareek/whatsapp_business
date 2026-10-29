@@ -1,5 +1,5 @@
 import { WabaHealthBanner } from './apikeys'
-import { EmojiButton, editAt } from './editor-tools'
+import { EmojiButton, editAt, RichText } from './editor-tools'
 import { InstagramSettings } from './instagram-settings'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Users as UsersIcon, UserPlus, Trash2, Phone, Plus, RefreshCw, Pencil, ShieldCheck, Send, Paperclip, X, FileText, Image as ImageIcon, Search,
@@ -299,7 +299,7 @@ export function AutoReplies() {
             <Field label="Number"><select value={f.phone_number_id ?? ''} onChange={(e) => setF({ ...f, phone_number_id: e.target.value })}><option value="">All numbers</option>{numbers.map((n) => <option key={n.id} value={n.id}>{n.name || n.display_number}</option>)}</select></Field>
           </div>
           <Field label="Trigger" hint={f.match_type === 'keyword' ? 'Comma-separated words, e.g. price, rate' : 'Case-insensitive'}><input value={f.trigger} onChange={(e) => setF({ ...f, trigger: e.target.value })} required /></Field>
-          <Field label="Reply"><textarea rows={4} value={f.reply} onChange={(e) => setF({ ...f, reply: e.target.value })} required /></Field>
+          <Field label="Reply"><RichText rows={4} value={f.reply} onChange={(t) => setF({ ...f, reply: t })} required /></Field>
           <div className="form-2">
             <Field label="Priority" hint="Higher wins"><input type="number" min={0} value={f.priority} onChange={(e) => setF({ ...f, priority: e.target.value })} /></Field>
             <div className="field"><span className="field-label">Enabled</span><Toggle checked={f.enabled} onChange={(v) => setF({ ...f, enabled: v })} /></div>
