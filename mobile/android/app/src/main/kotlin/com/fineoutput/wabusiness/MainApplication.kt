@@ -8,7 +8,7 @@ import org.json.JSONObject
 
 /**
  * The APK ships without google-services.json. The Flutter side downloads the Firebase client options from
- * GET /api/mobile/config and caches them in shared_preferences ("flutter.fcm_options"). Initialising the
+ * GET /api/mobile/config and caches them in shared_preferences ("flutter.fcm_options_v2"). Initialising the
  * default FirebaseApp here, at process start, lets FCM deliver pushes even when the app was killed.
  */
 class MainApplication : Application() {
@@ -16,7 +16,7 @@ class MainApplication : Application() {
         super.onCreate()
         try {
             if (FirebaseApp.getApps(this).isNotEmpty()) return
-            val raw = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE).getString("flutter.fcm_options", null) ?: return
+            val raw = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE).getString("flutter.fcm_options_v2", null) ?: return
             val j = JSONObject(raw)
             val b = FirebaseOptions.Builder()
                 .setApiKey(j.getString("apiKey"))

@@ -9,7 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'api.dart';
 import 'config.dart';
 
-const _prefsKey = 'fcm_options'; // native side reads "flutter.fcm_options" (see MainApplication.kt)
+// v2: builds <= 1.0.1 cached the CLIENT app's Firebase options here; a new key makes the native side ignore that stale cache.
+const _prefsKey = 'fcm_options_v2'; // native side reads "flutter.fcm_options_v2" (see MainApplication.kt)
 const channelId = 'chat_messages';
 
 /// Push notifications without a google-services.json baked into the APK: the Firebase client options
@@ -19,6 +20,8 @@ class PushService {
   final Api api;
   final _local = FlutterLocalNotificationsPlugin();
   bool available = false;
+  /// Why push is off (shown nowhere critical; for diagnostics).
+  String? reason;
   String? _token;
   StreamSubscription? _refreshSub, _msgSub, _openSub;
 
@@ -50,21 +53,36 @@ class PushService {
   }
 
   /// Every app start: refresh the options from the server (falls back to the cache), then init Firebase.
-  Future<void> init() async {
+  Future<void>? _initF;
+  Future<void> init() => _initF ??= _init();
+  Future<void> _init() async {
     FirebaseOptions? opts;
     try {
-      final r = await api.get('/mobile/config');
-      final o = r is Map ? (r['push']?['options']) : null;
+      final r = await api.get('/mobile/config', query: {'package': AppConfig.packageName});
+      // An older server ignores ?package= and returns the client app's Firebase app id; never use another package's options.
+      final forUs = r is Map && (r['package_name'] == null || r['package_name'] == AppConfig.packageName);
+      final o = forUs ? (r['push']?['options']) : null;
       final p = await SharedPreferences.getInstance();
-      if (o is Map) {
+      if (!forUs) {
+        await p.remove(_prefsKey);
+        reason = 'Server has no Firebase app for ${AppConfig.packageName} yet';
+      } else if (o is Map) {
         await p.setString(_prefsKey, jsonEncode(o));
         opts = optionsFromJson(o);
-      } else if (r is Map && r['push']?['enabled'] == false) {
-        await p.remove(_prefsKey); // admin removed the config
+      } else if (r['push']?['enabled'] == false) {
+        await p.remove(_prefsKey); // admin removed the config (or it has no app for this package)
+        reason = '${r['push']?['reason'] ?? 'Push not configured on the server'}';
+        return;
       }
-    } catch (_) {}
-    opts ??= await cachedOptions();
-    if (opts == null) { debugPrint('push: not configured on server yet'); return; }
+    } catch (_) {
+      opts = await cachedOptions(); // offline: use the cache
+    }
+    if (opts == null) { reason ??= 'Push not configured on the server'; debugPrint('push: $reason'); return; }
+    if (Firebase.apps.isNotEmpty && Firebase.app().options.appId != opts.appId) {
+      // Firebase was started natively from options cached by an older build (wrong app id). The new options are cached; they apply on next start.
+      reason = 'Push settings updated; reopen the app to enable notifications';
+      return;
+    }
     if (!await ensureFirebase(opts)) return;
     available = true;
 
@@ -87,6 +105,7 @@ class PushService {
 
   /// After login (and on each start while logged in): ask permission, register this device.
   Future<void> register() async {
+    try { await init(); } catch (_) {}
     if (!available || api.token == null) return;
     try {
       await FirebaseMessaging.instance.requestPermission(alert: true, badge: true, sound: true); // Android 13+ POST_NOTIFICATIONS

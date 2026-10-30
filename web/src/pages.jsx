@@ -388,6 +388,7 @@ function PushSettings() {
   }
   const remove = async (what) => { if (!confirm('Remove this file? Push notifications will stop.')) return; try { setP(await api('/push-settings', { method: 'DELETE', body: { what } })); toast.success('Removed') } catch (e) { toast.error(e.message) } }
   const test = async () => { setBusy('test'); try { const r = await api('/push-settings/test', { method: 'POST', body: { client_id: +cid } }); toast.success(r.message) } catch (e) { toast.error(e.message) } finally { setBusy('') } }
+  const testStaff = async () => { setBusy('test-staff'); try { const r = await api('/push-settings/test', { method: 'POST', body: { staff: true } }); toast.success(r.message) } catch (e) { toast.error(e.message) } finally { setBusy('') } }
   const Pick = ({ kind, label }) => <label className={`btn btn-secondary btn-sm file-btn ${busy === kind ? 'loading' : ''}`}><input type="file" accept=".json,application/json" hidden onChange={(e) => { upload(kind, e.target.files[0]); e.target.value = '' }} />{busy === kind ? 'Uploading…' : label}</label>
   if (!p) return <Card title="Push Notifications (Firebase)" icon={Bell}><Skeleton h={120} /></Card>
   return (<Card title="Push Notifications (Firebase)" icon={Bell} className="push-card">
@@ -395,7 +396,9 @@ function PushSettings() {
     <div className="push-grid">
       <div className={`push-item ${p.client_config.uploaded ? 'ok' : ''}`}>
         <div className="row between"><b>1. google-services.json</b>{p.client_config.uploaded ? <Badge tone="green">uploaded</Badge> : <Badge tone="amber">missing</Badge>}</div>
-        <p className="muted small">From Firebase → Project settings → Your apps → Android app <code>{p.package_name}</code>. Public client settings only.</p>
+        <p className="muted small">From Firebase → Project settings → Your apps. Add both Android apps (<code>{p.package_name}</code> and <code>com.fineoutput.wabusiness.admin</code>) to the project, then download the file — one file covers both apps.</p>
+        {(p.apps || []).map((a) => <div key={a.package_name} className="row gap8 small">{a.configured ? <Badge tone="green">ok</Badge> : <Badge tone="amber">missing</Badge>}<span>{a.label} <code>{a.package_name}</code></span></div>)}
+        {p.admin_app_missing && <div className="alert error small"><AlertCircle size={14} /> The uploaded file has no Android app <code>com.fineoutput.wabusiness.admin</code>, so the Master app cannot receive pushes. In Firebase add an Android app with that package name, download google-services.json again and upload it here.</div>}
         {p.client_config.uploaded && <div className="small">Project <b>{p.client_config.project_id}</b> · sender {p.client_config.sender_id}<div className="muted break">{p.client_config.app_id}</div></div>}
         <div className="row gap8"><Pick kind="client-config" label={p.client_config.uploaded ? 'Replace file' : 'Upload google-services.json'} />
           {p.client_config.uploaded && <Button size="sm" variant="ghost-danger" icon={Trash2} onClick={() => remove('client_config')} />}</div>
@@ -414,6 +417,11 @@ function PushSettings() {
       <div className="grow" />
       <div className="push-client"><ClientSelect clients={clients} value={cid} onChange={setCid} placeholder="Choose client…" /></div>
       <Button icon={Send} variant="primary" disabled={!p.enabled || !cid} loading={busy === 'test'} onClick={test}>Send test push</Button>
+    </div>
+    <div className="push-test">
+      <span className={`dot ${p.enabled && p.staff_devices ? 'on' : ''}`} /><span><b>Master app (staff)</b> · {p.staff_devices ?? 0} device{p.staff_devices === 1 ? '' : 's'} registered · gets every incoming message on all numbers, including numbers not assigned to a client</span>
+      <div className="grow" />
+      <Button icon={Send} variant="secondary" disabled={!p.enabled || !p.staff_devices} loading={busy === 'test-staff'} onClick={testStaff}>Test Master app push</Button>
     </div>
   </Card>)
 }

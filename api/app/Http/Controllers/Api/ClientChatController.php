@@ -156,11 +156,15 @@ class ClientChatController extends Controller
     }
 
     /** GET /api/mobile/config (public): runtime Firebase options so push works without rebuilding the APK. */
-    public function mobileConfig(FcmService $fcm)
+    public function mobileConfig(Request $r, FcmService $fcm)
     {
-        $opt = $fcm->clientOptions();
-        return response()->json(['app' => 'WA Business Fineoutput', 'package_name' => FcmService::PACKAGE,
-            'push' => ['enabled' => (bool) $opt, 'server_ready' => $fcm->enabled(), 'options' => $opt]])->header('Cache-Control', 'public, max-age=300');
+        // ?package= lets the Master app (com.fineoutput.wabusiness.admin) get ITS Firebase app id; default = client app
+        $pkg = $r->query('package') === FcmService::PACKAGE_ADMIN ? FcmService::PACKAGE_ADMIN : FcmService::PACKAGE;
+        $opt = $fcm->clientOptions($pkg);
+        $push = ['enabled' => (bool) $opt, 'server_ready' => $fcm->enabled(), 'options' => $opt];
+        if (! $opt && $fcm->clientOptions()) $push['reason'] = 'The uploaded google-services.json has no Android app '.$pkg.'. Add it in the Firebase console and re-upload the file.';
+        return response()->json(['app' => $pkg === FcmService::PACKAGE ? 'WA Business Fineoutput' : 'WA Fineoutput Master', 'package_name' => $pkg,
+            'push' => $push])->header('Cache-Control', 'public, max-age=300');
     }
 
     // ---- helpers ----

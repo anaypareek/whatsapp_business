@@ -82,7 +82,11 @@ class Api {
     dynamic j;
     try { j = res.body.isEmpty ? null : jsonDecode(res.body); } catch (_) { j = null; }
     if (res.statusCode >= 200 && res.statusCode < 300) return j;
-    if (res.statusCode == 401 && token != null) onUnauthorized?.call();
+    // Only a 401 for the CURRENT token ends the session (a late reply to a request sent with an older token must not log out a fresh login).
+    if (res.statusCode == 401 && token != null) {
+      final sent = res.request?.headers['Authorization'] ?? res.request?.headers['authorization'];
+      if (sent == null || sent == 'Bearer $token') onUnauthorized?.call();
+    }
     String msg = 'Request failed (${res.statusCode})';
     if (j == null && res.body.isNotEmpty) {
       // non-JSON error page (e.g. web firewall / proxy): show its title instead of a generic text

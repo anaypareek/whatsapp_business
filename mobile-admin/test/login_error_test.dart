@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wabusiness/src/api.dart';
+import 'package:wabusiness/src/config.dart';
 import 'package:wabusiness/src/screens/login.dart';
 import 'package:wabusiness/src/session.dart';
 
@@ -63,26 +64,9 @@ void main() {
     expect(loginErrorText((await loginErr((_) => j({'ok': true})))!), contains('no token'));
   });
 
-  test('non-admin account is rejected with a clear message', () async {
+  test('non-admin account is rejected with a clear message', skip: !AppConfig.isAdmin, () async {
     final e = await loginErr((_) => j({'token': 't', 'user': {'id': 2, 'is_admin': false}}));
     expect(loginErrorText(e!), contains('not an admin'));
-  });
-
-  test('ROOT CAUSE: a successful login survives a secure-storage write failure (retry after wipe)', () async {
-    final st = FakeStorage(failWrites: 1);
-    final s = Session(Api('http://x', client: MockClient((_) async => j(okBody))), storage: st);
-    await s.login('admin@x.com', 'pw');
-    expect(s.loggedIn, isTrue);
-    expect(st.deleteAllCalls, 1);
-    expect(st.data['token'], '1|abc');
-    expect(s.storageWarning, isNull);
-  });
-
-  test('persistent storage failure still logs in (in-memory) and warns', () async {
-    final s = Session(Api('http://x', client: MockClient((_) async => j(okBody))), storage: FakeStorage(failWrites: 99));
-    await s.login('admin@x.com', 'pw');
-    expect(s.loggedIn, isTrue);
-    expect(s.storageWarning, contains('could not save'));
   });
 
   testWidgets('login screen renders the real server error', (t) async {

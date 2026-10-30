@@ -17,6 +17,10 @@ class FcmService
     public const SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
 
     public const PACKAGE = 'com.fineoutput.wabusiness';
+    /** WA Fineoutput Master (staff) app. Same Firebase project, separate Android app entry in google-services.json. */
+    public const PACKAGE_ADMIN = 'com.fineoutput.wabusiness.admin';
+    /** package => settings key holding its parsed FirebaseOptions */
+    public const APPS = [self::PACKAGE => 'fcm_client_options', self::PACKAGE_ADMIN => 'fcm_client_options_admin'];
 
     /** Service-account JSON: FCM_CREDENTIALS_PATH file (optional override) or the one uploaded in Admin → Settings (encrypted in DB). */
     public function credentials(): ?array
@@ -29,24 +33,49 @@ class FcmService
     }
 
     /** Public Firebase options for the Android app (parsed from the uploaded google-services.json). */
-    public function clientOptions(): ?array
+    public function clientOptions(?string $package = null): ?array
     {
-        $j = json_decode((string) \App\Models\Setting::get('fcm_client_options'), true);
+        $key = self::APPS[$package ?? self::PACKAGE] ?? null;
+        if (! $key) return null;
+        $j = json_decode((string) \App\Models\Setting::get($key), true);
         return is_array($j) && ! empty($j['appId']) ? $j : null;
     }
 
     public function projectId(): ?string { return config('services.fcm.project_id') ?: ($this->credentials()['project_id'] ?? $this->clientOptions()['projectId'] ?? null); }
 
-    /** Validate + extract FirebaseOptions from google-services.json for our package. Throws InvalidArgumentException. */
-    public static function parseGoogleServices(string $raw): array
+    /** Validate + extract FirebaseOptions for the client app package (back-compat). Throws InvalidArgumentException. */
+    public static function parseGoogleServices(string $raw, string $package = self::PACKAGE): array
+    {
+        $all = self::parseGoogleServicesAll($raw);
+        if (! isset($all[$package])) {
+            throw new \InvalidArgumentException('google-services.json has no Android app with package name '.$package.' (found: '.implode(', ', array_keys($all)).'). Add an Android app with exactly that package name in Firebase and download the file again.');
+        }
+        return $all[$package];
+    }
+
+    /**
+     * FirebaseOptions for every one of OUR packages present in google-services.json (one file can hold several Android apps).
+     * Throws if none of them is present.
+     * @return array<string,array> package => options
+     */
+    public static function parseGoogleServicesAll(string $raw): array
     {
         $j = json_decode($raw, true);
         if (! is_array($j) || empty($j['project_info']) || empty($j['client'])) throw new \InvalidArgumentException('This is not a google-services.json file (missing project_info/client).');
-        $client = collect($j['client'])->first(fn ($c) => ($c['client_info']['android_client_info']['package_name'] ?? null) === self::PACKAGE);
-        if (! $client) {
-            $pk = collect($j['client'])->pluck('client_info.android_client_info.package_name')->filter()->implode(', ');
-            throw new \InvalidArgumentException('google-services.json has no Android app with package name '.self::PACKAGE.($pk ? " (found: $pk)" : '').'. Add an Android app with exactly that package name in Firebase and download the file again.');
+        $out = [];
+        foreach (array_keys(self::APPS) as $pkg) {
+            $client = collect($j['client'])->first(fn ($c) => ($c['client_info']['android_client_info']['package_name'] ?? null) === $pkg);
+            if ($client) $out[$pkg] = self::optionsFor($j, $client);
         }
+        if (! $out) {
+            $pk = collect($j['client'])->pluck('client_info.android_client_info.package_name')->filter()->implode(', ');
+            throw new \InvalidArgumentException('google-services.json has no Android app with package name '.self::PACKAGE.' or '.self::PACKAGE_ADMIN.($pk ? " (found: $pk)" : '').'. Add an Android app with exactly that package name in Firebase and download the file again.');
+        }
+        return $out;
+    }
+
+    protected static function optionsFor(array $j, array $client): array
+    {
         $key = collect($client['api_key'] ?? [])->pluck('current_key')->filter()->first();
         $opt = ['apiKey' => $key, 'appId' => $client['client_info']['mobilesdk_app_id'] ?? null, 'messagingSenderId' => (string) ($j['project_info']['project_number'] ?? ''),
             'projectId' => $j['project_info']['project_id'] ?? null, 'storageBucket' => $j['project_info']['storage_bucket'] ?? null];

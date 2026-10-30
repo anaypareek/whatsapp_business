@@ -62,14 +62,16 @@ class Api {
   Future<http.Response> _raw(Future<http.Response> Function() f, {Duration timeout = _timeout}) async {
     try {
       return await f().timeout(timeout);
-    } on SocketException {
-      throw ApiException(0, 'No internet connection');
-    } on HttpException {
-      throw ApiException(0, 'Network error');
-    } on http.ClientException {
-      throw ApiException(0, 'Network error');
-    } on FormatException {
-      throw ApiException(0, 'Bad server response');
+    } on SocketException catch (e) {
+      throw ApiException(0, 'No internet connection (${e.osError?.message ?? e.message})');
+    } on HandshakeException catch (e) {
+      throw ApiException(0, 'Secure connection failed (${e.message})');
+    } on HttpException catch (e) {
+      throw ApiException(0, 'Network error (${e.message})');
+    } on http.ClientException catch (e) {
+      throw ApiException(0, 'Network error (${e.message})');
+    } on FormatException catch (e) {
+      throw ApiException(0, 'Bad server response (${e.message})');
     } on Exception catch (e) {
       if (e.toString().contains('TimeoutException')) throw ApiException(0, 'The server took too long to respond');
       rethrow;
@@ -80,8 +82,17 @@ class Api {
     dynamic j;
     try { j = res.body.isEmpty ? null : jsonDecode(res.body); } catch (_) { j = null; }
     if (res.statusCode >= 200 && res.statusCode < 300) return j;
-    if (res.statusCode == 401 && token != null) onUnauthorized?.call();
+    // Only a 401 for the CURRENT token ends the session (a late reply to a request sent with an older token must not log out a fresh login).
+    if (res.statusCode == 401 && token != null) {
+      final sent = res.request?.headers['Authorization'] ?? res.request?.headers['authorization'];
+      if (sent == null || sent == 'Bearer $token') onUnauthorized?.call();
+    }
     String msg = 'Request failed (${res.statusCode})';
+    if (j == null && res.body.isNotEmpty) {
+      // non-JSON error page (e.g. web firewall / proxy): show its title instead of a generic text
+      final t = RegExp(r'<title>([^<]*)</title>', caseSensitive: false).firstMatch(res.body)?.group(1)?.trim();
+      if (t != null && t.isNotEmpty) msg = 'Server error: $t';
+    }
     String? code;
     if (j is Map) {
       code = (j['error_code'] ?? j['code'])?.toString();
@@ -94,8 +105,13 @@ class Api {
         msg = '${j['error']}';
       }
     }
-    if (res.statusCode == 429) msg = 'Too many requests, slowing down';
+    if (res.statusCode == 429) msg = ra429(res.headers['retry-after']);
     final ra = int.tryParse(res.headers['retry-after'] ?? '');
     throw ApiException(res.statusCode, msg, code: code, retryAfter: ra == null ? null : Duration(seconds: ra));
   }
+}
+
+String ra429(String? retryAfter) {
+  final s = int.tryParse(retryAfter ?? '');
+  return s == null ? 'Too many attempts. Please wait and try again.' : 'Too many attempts. Try again in ${s}s.';
 }

@@ -32,6 +32,7 @@ class WaApp extends StatefulWidget {
 
 class _WaAppState extends State<WaApp> {
   final _nav = GlobalKey<NavigatorState>();
+  final _msg = GlobalKey<ScaffoldMessengerState>();
   Services get s => widget.s;
 
   @override
@@ -57,9 +58,11 @@ class _WaAppState extends State<WaApp> {
   void _startSession() => s.poller.start();
 
   Future<void> _onLoggedIn() async {
-    s.store.clear();
-    _startSession();
-    s.push?.register();
+    // The login itself already succeeded; post-login setup problems must not surface as a failed sign-in.
+    try { s.store.clear(); _startSession(); } catch (e) { debugPrint('post-login start failed: $e'); }
+    try { s.push?.register(); } catch (_) {}
+    final w = s.session.storageWarning;
+    if (w != null) _msg.currentState?.showSnackBar(SnackBar(content: Text(w), duration: const Duration(seconds: 8)));
   }
 
   Future<void> _logout({bool remote = true}) async {
@@ -82,6 +85,7 @@ class _WaAppState extends State<WaApp> {
     return MaterialApp(
       title: AppConfig.appName,
       navigatorKey: _nav,
+      scaffoldMessengerKey: _msg,
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
       home: ListenableBuilder(

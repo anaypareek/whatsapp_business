@@ -235,4 +235,64 @@ class MobileChatTest extends TestCase
         DeviceToken::create(['client_id' => $this->a->id, 'token' => 'good-token-'.str_repeat('a', 20)]);
         $this->withToken($t)->postJson('/api/push-settings/test', ['client_id' => $this->a->id])->assertOk()->assertJsonPath('sent', 1);
     }
+
+    // ---- WA Fineoutput Master app push (com.fineoutput.wabusiness.admin) ----
+    protected function withAdminApp(array $gs): array
+    {
+        $gs['client'][] = ['client_info' => ['mobilesdk_app_id' => '1:123456789:android:adm', 'android_client_info' => ['package_name' => 'com.fineoutput.wabusiness.admin']],
+            'api_key' => [['current_key' => 'AIzaTestKey']]];
+        return $gs;
+    }
+
+    public function test_google_services_with_both_apps_serves_each_package_its_own_app_id(): void
+    {
+        [$sa, $gs] = $this->fakeFirebase();
+        $t = $this->adminUpload($sa, $this->withAdminApp($gs));
+        $this->getJson('/api/mobile/config')->assertJsonPath('package_name', 'com.fineoutput.wabusiness')->assertJsonPath('push.options.appId', '1:123456789:android:abc');
+        $this->getJson('/api/mobile/config?package=com.fineoutput.wabusiness.admin')->assertJsonPath('package_name', 'com.fineoutput.wabusiness.admin')
+            ->assertJsonPath('push.enabled', true)->assertJsonPath('push.options.appId', '1:123456789:android:adm');
+        $this->withToken($t)->getJson('/api/push-settings')->assertJsonPath('admin_app_missing', false)->assertJsonPath('apps.1.configured', true)->assertJsonPath('staff_devices', 0);
+    }
+
+    public function test_client_only_google_services_reports_master_app_missing(): void
+    {
+        [$sa, $gs] = $this->fakeFirebase();
+        $t = $this->adminUpload($sa, $gs);
+        $this->getJson('/api/mobile/config?package=com.fineoutput.wabusiness.admin')->assertJsonPath('push.enabled', false)
+            ->assertJsonPath('push.reason', fn ($m) => str_contains($m, 'com.fineoutput.wabusiness.admin'));
+        $this->withToken($t)->getJson('/api/push-settings')->assertJsonPath('admin_app_missing', true)->assertJsonPath('apps.1.configured', false);
+        // a later file with only the admin app keeps the client app's options
+        $only = $this->withAdminApp($gs); array_shift($only['client']);
+        $this->withToken($t)->post('/api/push-settings/client-config', ['file' => UploadedFile::fake()->createWithContent('g.json', json_encode($only))], ['Accept' => 'application/json'])->assertOk()
+            ->assertJsonPath('admin_app_missing', false)->assertJsonPath('apps.0.configured', true);
+        $this->withToken($t)->deleteJson('/api/push-settings', ['what' => 'client_config'])->assertOk()->assertJsonPath('apps.1.configured', false);
+    }
+
+    public function test_inbound_on_number_without_client_pushes_every_staff_device_and_client_pushes_unchanged(): void
+    {
+        [$sa, $gs] = $this->fakeFirebase();
+        $t = $this->adminUpload($sa, $this->withAdminApp($gs));
+        $free = PhoneNumber::create(['phone_number_id' => '3333', 'display_number' => '+91 3', 'client_id' => null, 'status' => 'CONNECTED']);
+        $admin = User::where('email', 'a@t.l')->first();
+        $this->app['auth']->forgetGuards();
+        $this->withToken($t)->postJson('/api/admin/devices', ['token' => 'staff-one-'.str_repeat('s', 20), 'app_version' => '1.0.2'])->assertCreated();
+        \App\Models\UserDeviceToken::create(['user_id' => $admin->id, 'token' => 'staff-two-'.str_repeat('z', 20), 'platform' => 'android']);
+        DeviceToken::create(['client_id' => $this->a->id, 'token' => 'client-a-'.str_repeat('a', 20)]);
+        Http::fake(['oauth2.googleapis.com/token' => Http::response(['access_token' => 'ya29.test', 'expires_in' => 3599]),
+            'fcm.googleapis.com/*' => Http::response(['name' => 'projects/wab-test/messages/1'])]);
+
+        $this->inbound('919777000111', 'hello unassigned', '3333', 'Walk-in')->assertOk();
+        $sent = fn () => collect(Http::recorded())->map(fn ($x) => $x[0])->filter(fn ($r) => str_contains($r->url(), 'messages:send'))->map(fn ($r) => $r['message']['token'])->values();
+        $this->assertEqualsCanonicalizing(['staff-one-'.str_repeat('s', 20), 'staff-two-'.str_repeat('z', 20)], $sent()->all()); // no client devices
+        $this->assertDatabaseHas('messages', ['phone_number_id' => $free->id, 'body' => 'hello unassigned']);
+
+        // assigned number: the client's device AND all staff devices
+        $this->inbound('919000000001', 'order?')->assertOk();
+        $this->assertCount(3, $sent()->unique()); // (the test kernel re-runs earlier after-response jobs, so count unique recipients)
+        $this->assertContains('client-a-'.str_repeat('a', 20), $sent()->all());
+
+        // staff test push from settings
+        $this->withToken($t)->postJson('/api/push-settings/test', ['staff' => true])->assertOk()->assertJsonPath('sent', 2);
+    }
 }
+
