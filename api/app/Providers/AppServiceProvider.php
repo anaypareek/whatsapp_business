@@ -23,5 +23,6 @@ class AppServiceProvider extends ServiceProvider
         $key = fn ($r) => 'tok:'.($r->user()?->currentAccessToken()?->id ?? $r->ip());
         \Illuminate\Support\Facades\RateLimiter::for('chat-sync', fn ($r) => \Illuminate\Cache\RateLimiting\Limit::perMinute(30)->by($key($r)));
         \Illuminate\Support\Facades\RateLimiter::for('chat', fn ($r) => \Illuminate\Cache\RateLimiting\Limit::perMinute(90)->by($key($r)));
+        \Illuminate\Support\Facades\RateLimiter::for('number-onboard', fn ($r) => \Illuminate\Cache\RateLimiting\Limit::perMinute(20)->by($key($r))); // Add number flow (create / request_code / verify_code)
     }
 }

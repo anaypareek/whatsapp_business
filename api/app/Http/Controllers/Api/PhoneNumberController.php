@@ -61,8 +61,12 @@ class PhoneNumberController extends Controller
         abort_unless($r->user()?->is_admin, 403, 'Only admins can register numbers.');
         $d = $r->validate(['pin' => ['required', 'string', 'regex:/^\d{6}$/']], ['pin.regex' => 'The PIN must be exactly 6 digits.']);
         try { $res = $wa->registerNumber($phoneNumber->phone_number_id, $d['pin']); }
-        catch (Throwable $e) { return $this->fail($e, 502, ['registered' => false, 'number' => $phoneNumber->load('client:id,name,company,is_active')]); }
+        catch (Throwable $e) {
+            if ($phoneNumber->onboarding_step) $phoneNumber->update(['onboarding_error' => $e->getMessage()]);
+            return $this->fail($e, 502, ['registered' => false, 'number' => $phoneNumber->load('client:id,name,company,is_active')]);
+        }
         unset($d);
+        if ($phoneNumber->onboarding_step) $phoneNumber->update(['onboarding_step' => 'registered', 'registered_at' => now(), 'onboarding_error' => null]);
         $refreshError = null;
         try { $phoneNumber->applyMeta($wa->getPhoneNumber($phoneNumber->phone_number_id)); }
         catch (Throwable $e) { $refreshError = $e->getMessage(); }

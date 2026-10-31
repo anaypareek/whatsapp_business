@@ -563,3 +563,20 @@ tr.dim td{opacity:.55}
 .rate-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;margin-bottom:12px}
 .period{flex-wrap:nowrap}.period input[type=date]{width:auto;min-width:0;flex:0 0 auto}
 @media (max-width:760px){.period{flex-wrap:wrap}}
+/* Number Master → Add number wizard */
+.wiz-steps{display:flex;gap:6px;list-style:none;margin:0;padding:0;flex-wrap:wrap}
+.wiz-steps li{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);padding:6px 12px 6px 6px;border-radius:999px;background:#FCFBF9;border:1px solid var(--line2)}
+.wiz-steps li span{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:600;background:var(--line2);color:var(--muted)}
+.wiz-steps li.on{color:var(--p3);border-color:var(--p100);background:var(--p50);font-weight:600}.wiz-steps li.on span{background:var(--p2,#F97316);color:#fff}
+.wiz-steps li.done{color:#166534}.wiz-steps li.done span{background:#DCFCE7;color:#166534}
+.an-phone{display:grid;grid-template-columns:140px 1fr;gap:12px}.an-phone .field:only-child{grid-column:1/-1}
+.an-method{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px}.an-method .field{min-width:200px}.an-method>.field-label{width:100%}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:10px;overflow:hidden}.seg button{display:flex;align-items:center;gap:6px;padding:9px 14px;background:#fff;border:0;cursor:pointer;font:inherit;font-size:13px;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line2)}.seg button.on{background:var(--p50);color:var(--p3);font-weight:600}
+.an-status{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;padding:14px;border:1px solid var(--line2);border-radius:10px;background:#FCFBF9}
+.an-status small{display:block;color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}.an-status code{margin-left:6px}
+.meta-err-kv{display:grid;grid-template-columns:max-content 1fr;gap:3px 12px;margin:4px 0 0;font-size:12.5px}.meta-err-kv dt{font-family:ui-monospace,monospace;opacity:.75}.meta-err-kv dd{margin:0}
+.raw-json{background:#FCFBF9;border:1px solid var(--line2);border-radius:8px;padding:10px;font-size:12px;overflow:auto;max-height:220px}
+.onb-chip{display:inline-flex;align-items:center;gap:4px}
+@media (max-width:640px){.an-phone{grid-template-columns:1fr}}
+.an-pins{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media (max-width:640px){.an-pins{grid-template-columns:1fr}}

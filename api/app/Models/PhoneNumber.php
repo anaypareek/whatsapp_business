@@ -6,8 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 class PhoneNumber extends Model
 {
     protected $fillable = ['client_id', 'phone_number_id', 'display_number', 'name', 'waba_id', 'quality_rating', 'status',
-        'name_status', 'platform_type', 'code_verification_status', 'account_mode', 'messaging_limit_tier', 'meta_checked_at'];
-    protected $casts = ['meta_checked_at' => 'datetime'];
+        'name_status', 'platform_type', 'code_verification_status', 'account_mode', 'messaging_limit_tier', 'meta_checked_at',
+        'onboarding_step', 'country_code', 'local_number', 'code_method', 'code_requested_at', 'verified_at', 'registered_at', 'onboarding_error'];
+    protected $casts = ['meta_checked_at' => 'datetime', 'code_requested_at' => 'datetime', 'verified_at' => 'datetime', 'registered_at' => 'datetime'];
+    /** Add-number flow steps, in order. */
+    public const STEPS = ['created', 'code_requested', 'verified', 'registered'];
 
     /** Assigning a number to a client makes its whole history (past + future) visible in that client's chat at once. */
     protected static function booted(): void
@@ -28,6 +31,11 @@ class PhoneNumber extends Model
             'account_mode' => 'account_mode', 'messaging_limit_tier' => 'messaging_limit_tier'];
         foreach ($map as $k => $col) if (isset($m[$k]) && $m[$k] !== '') $this->{$col} = is_scalar($m[$k]) ? (string) $m[$k] : json_encode($m[$k]);
         $this->meta_checked_at = now();
+        // resumable add-number flow: Meta's view wins if it is further along than ours
+        if ($this->onboarding_step && $this->onboarding_step !== 'registered') {
+            if (($m['platform_type'] ?? null) === 'CLOUD_API' || ($m['status'] ?? null) === 'CONNECTED') { $this->onboarding_step = 'registered'; $this->registered_at ??= now(); }
+            elseif (($m['code_verification_status'] ?? null) === 'VERIFIED' && in_array($this->onboarding_step, ['created', 'code_requested'], true)) { $this->onboarding_step = 'verified'; $this->verified_at ??= now(); }
+        }
         $this->save();
         return $this;
     }

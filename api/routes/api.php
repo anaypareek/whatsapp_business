@@ -104,6 +104,11 @@ Route::middleware(['auth:sanctum', EnsureStaff::class])->group(function () {
     Route::post('/phone-numbers-sync', [Api\PhoneNumberController::class, 'sync']);
     Route::post('/phone-numbers/{phoneNumber}/register', [Api\PhoneNumberController::class, 'register'])->middleware('throttle:10,1');
     Route::post('/phone-numbers/{phoneNumber}/refresh', [Api\PhoneNumberController::class, 'refresh']);
+    // Add number via Cloud API (admin only, enforced in the controller)
+    Route::get('/phone-numbers-wabas', [Api\PhoneNumberOnboardingController::class, 'wabas']);
+    Route::post('/phone-numbers-onboard', [Api\PhoneNumberOnboardingController::class, 'store'])->middleware('throttle:number-onboard');
+    Route::post('/phone-numbers/{phoneNumber}/request-code', [Api\PhoneNumberOnboardingController::class, 'requestCode'])->middleware('throttle:number-onboard');
+    Route::post('/phone-numbers/{phoneNumber}/verify-code', [Api\PhoneNumberOnboardingController::class, 'verifyCode'])->middleware('throttle:number-onboard');
 
     Route::apiResource('templates', Api\TemplateController::class);
     Route::get('/templates/{template}/test', [Api\TemplateController::class, 'testPreview']);

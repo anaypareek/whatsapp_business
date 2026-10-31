@@ -8,6 +8,7 @@ import { api, fmtTime, fmtShort } from './api'
 import { Button, Card, PageHeader, Field, TableSkeleton, Empty, Badge, Toggle, useToast, useLoad, Modal, Avatar, Skeleton } from './ui'
 import { TemplateSender } from './templates'
 import { ClientSelect } from './clients'
+import { AddNumberWizard, ONBOARD_STEPS } from './add-number'
 
 // ---------------- Users ----------------
 export function Users({ user }) {
@@ -77,14 +78,16 @@ export function Numbers({ user }) {
     catch (e) { toast.error(e.message) }
   }
   const unassigned = rows.filter((n) => !n.client_id).length
+  const [wiz, setWiz] = useState(null) // null | {} (new) | {n} (resume)
   return (<div className="page">
-    <PageHeader icon={Phone} title="Number Master" subtitle={`WhatsApp phone numbers linked to your WABA${!cf && unassigned ? ` · ${unassigned} not assigned to a client` : ''}`}><Button icon={RefreshCw} onClick={sync} title="Import every number already on the WABA (keeps existing client assignments)">Sync numbers from Meta</Button></PageHeader>
+    <PageHeader icon={Phone} title="Number Master" subtitle={`WhatsApp phone numbers linked to your WABA${!cf && unassigned ? ` · ${unassigned} not assigned to a client` : ''}`}><Button icon={RefreshCw} onClick={sync} title="Import every number already on the WABA (keeps existing client assignments)">Sync numbers from Meta</Button>
+      {user.is_admin && <Button variant="primary" icon={Plus} onClick={() => setWiz({})} title="Add a brand-new number to the WABA: verify by SMS/voice code and register it with the Cloud API">Add new number</Button>}</PageHeader>
     <WabaHealthBanner />
     {pending.length > 0 && <div className="alert warn reg-banner"><AlertCircle size={18} /><div>
       <b>{pending.length === 1 ? `${pending[0].display_number} is ${pending[0].status}` : `${pending.length} numbers are not connected`}: messages from {pending.length === 1 ? 'it' : 'them'} will fail with “(#133010) Account not registered”.</b>
       <div>A number must be registered with the WhatsApp Cloud API before it can send. {user.is_admin ? <>Click <b>Register</b> on the number and enter a 6-digit PIN (the number's two-step verification PIN).</> : 'Ask an admin to register it.'} Use <b>Refresh status</b> to re-check with Meta.</div></div></div>}
     <div className="grid-form">
-      <Card title={editId ? 'Edit number' : 'Add number'} icon={editId ? Pencil : Plus}>
+      <Card title={editId ? 'Edit number' : 'Add existing number'} icon={editId ? Pencil : Plus}>
         <form className="form" onSubmit={save}>
           <Field label="Phone number ID" hint="From Meta → WhatsApp → API Setup" icon={Hash}><input value={f.phone_number_id} onChange={(e) => setF({ ...f, phone_number_id: e.target.value })} required /></Field>
           <Field label="Display number" icon={Phone}><input placeholder="+91 98765 43210" value={f.display_number} onChange={(e) => setF({ ...f, display_number: e.target.value })} required /></Field>
@@ -97,7 +100,7 @@ export function Numbers({ user }) {
       <Card title={`Numbers (${rows.length})`} pad={false} actions={<div className="filter-w"><ClientSelect allowAll clients={clients} value={cf} onChange={setCf} /></div>}>
         <div className="table-wrap"><table className="table"><thead><tr><th>Number</th><th>Client</th><th>Phone number ID</th><th>Quality</th><th>Status</th><th /></tr></thead>
           {loading ? <TableSkeleton cols={6} /> : rows.length ? <tbody>{rows.map((n) => <tr key={n.id}>
-            <td><div className="cell-user"><span className="ico-tile"><Phone size={16} /></span><div><b>{n.display_number}</b><small>{n.name || '—'}</small></div></div></td>
+            <td><div className="cell-user"><span className="ico-tile"><Phone size={16} /></span><div><b>{n.display_number}</b><small>{n.name || '—'}</small>{n.onboarding_step && n.onboarding_step !== 'registered' && <small className="onb-chip"><Badge tone="amber">Setup: {ONBOARD_STEPS.find(([k]) => k === n.onboarding_step)?.[1] || n.onboarding_step} done</Badge></small>}</div></div></td>
             <td>{n.client ? <div className="client-cell"><b>{n.client.name}</b><small>{n.client.company || ''}{!n.client.is_active && ' · inactive'}</small></div> : <span className="client-chip none">Unassigned</span>}
               <button type="button" className="link-btn" onClick={() => setAssign({ n, client_id: n.client_id ? String(n.client_id) : '' })}>{n.client ? 'Change' : 'Assign client'}</button></td>
             <td><code>{n.phone_number_id}</code></td>
@@ -105,7 +108,9 @@ export function Numbers({ user }) {
             <td>{n.status ? <Badge tone={n.status === 'CONNECTED' ? 'green' : ['PENDING', 'UNVERIFIED', 'MIGRATED'].includes(n.status) ? 'amber' : ['BANNED', 'FLAGGED', 'RESTRICTED', 'DISCONNECTED', 'DELETED'].includes(n.status) ? 'red' : 'gray'}>{n.status}</Badge> : <span className="muted">—</span>}
               {(n.platform_type || n.name_status) && <small className="block muted">{[n.platform_type && n.platform_type.replace(/_/g, ' ').toLowerCase(), n.name_status && `name ${n.name_status.replace(/_/g, ' ').toLowerCase()}`].filter(Boolean).join(' · ')}</small>}</td>
             <td className="right nowrap">
-              {user.is_admin && n.status !== 'CONNECTED' && <Button size="sm" variant="primary" icon={ShieldCheck} onClick={() => openReg(n)}>Register</Button>}
+              {user.is_admin && n.onboarding_step && n.onboarding_step !== 'registered' && <Button size="sm" variant="primary" icon={Plus} onClick={() => setWiz({ n })} title="Resume the Add number flow">Continue setup</Button>}
+              {user.is_admin && n.status !== 'CONNECTED' && !(n.onboarding_step && n.onboarding_step !== 'registered') && <Button size="sm" variant="primary" icon={ShieldCheck} onClick={() => openReg(n)}>Register</Button>}
+              {user.is_admin && n.onboarding_step === 'registered' && <Button size="sm" variant="ghost" icon={Info} title="Display-name review status" onClick={() => setWiz({ n })} />}
               <Button size="sm" variant="ghost" icon={RefreshCw} loading={refreshing === n.id} title="Refresh status from Meta" onClick={() => refresh(n)} />
               <Button size="sm" variant="ghost" icon={Pencil} onClick={() => { setEditId(n.id); setF({ phone_number_id: n.phone_number_id, display_number: n.display_number, name: n.name || '', client_id: n.client_id ? String(n.client_id) : '' }) }} />
               {user.is_admin && n.status === 'CONNECTED' && <Button size="sm" variant="ghost" icon={ShieldCheck} title="Register again (e.g. after a PIN change or migration)" onClick={() => openReg(n)} />}
@@ -114,6 +119,7 @@ export function Numbers({ user }) {
         </table></div>
       </Card>
     </div>
+    {wiz && <AddNumberWizard resume={wiz.n} clients={clients} onClose={() => { setWiz(null); reload() }} onChanged={reload} />}
     {assign && <Modal title={`Assign ${assign.n.display_number}`} onClose={() => setAssign(null)}
       footer={<><Button onClick={() => setAssign(null)}>Cancel</Button><Button variant="primary" icon={Check} onClick={doAssign}>{assign.client_id ? 'Assign' : 'Unassign'}</Button></>}>
       <div className="form"><Field label="Client"><ClientSelect clients={clients} value={assign.client_id} onChange={(v) => setAssign({ ...assign, client_id: v })} /></Field>

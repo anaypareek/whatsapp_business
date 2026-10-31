@@ -137,6 +137,38 @@ header('Content-Type: application/json');
     $err('mock: unknown Instagram path', 100, null, 404);
 })();
 // ============ end Instagram mock ============
+// ============ Add-number flow mock (Number Master → Add number) ============
+// POST /{waba}/phone_numbers → new id 1999xxxxxxxxxxxx (phone_number ending in 0000 = "already in use" error);
+// request_code; verify_code (code 000000 = wrong code); register (PIN 000000 = PIN mismatch); GET shows name_status PENDING_REVIEW.
+// State: tools/mock-meta-onboard.json (gitignored).
+(function () use ($path) {
+    $p = preg_replace('#^/v\d+\.\d+#', '', $path); $method = $_SERVER['REQUEST_METHOD'];
+    $isNew = preg_match('#^/(1999\d{12})(?:/(request_code|verify_code|register))?$#', $p, $m);
+    $isCreate = $method === 'POST' && preg_match('#^/(\d+)/phone_numbers$#', $p, $cm);
+    if (! $isNew && ! $isCreate) return;
+    $file = __DIR__.'/mock-meta-onboard.json';
+    $st = is_file($file) ? json_decode(file_get_contents($file), true) : [];
+    $in = array_merge($_GET, $_POST, json_decode(file_get_contents('php://input'), true) ?: []);
+    $json = function ($d, int $code = 200) { http_response_code($code); echo json_encode($d); exit; };
+    $err = fn ($msg, $code, $x = []) => $json(['error' => ['message' => $msg, 'type' => 'OAuthException', 'code' => $code] + $x + ['fbtrace_id' => 'MOCK'.bin2hex(random_bytes(4))]], 400);
+    if ($isCreate) {
+        $num = preg_replace('/\D/', '', $in['phone_number'] ?? '');
+        if (str_ends_with($num, '0000')) $err('Invalid parameter', 100, ['error_subcode' => 2388001, 'error_user_title' => 'Phone number already in use', 'error_user_msg' => 'This phone number is already registered to a WhatsApp account. Delete it from that account first.']);
+        $id = '1999'.str_pad(substr($num, -12), 12, '0', STR_PAD_LEFT);
+        $st[$id] = ['display_phone_number' => '+'.($in['cc'] ?? '').' '.$num, 'verified_name' => $in['verified_name'] ?? '', 'verified' => false, 'registered' => false];
+        file_put_contents($file, json_encode($st)); $json(['id' => $id]);
+    }
+    $id = $m[1]; $sub = $m[2] ?? ''; $n = $st[$id] ?? null;
+    if (! $n) $err("Unsupported get request. Object with ID '$id' does not exist.", 100, ['error_subcode' => 33]);
+    if ($sub === 'request_code') $json(['success' => true]);
+    if ($sub === 'verify_code') { if (($in['code'] ?? '') === '000000') $err("Code couldn't be verified", 136025, ['error_user_title' => 'Incorrect code', 'error_user_msg' => 'The verification code you entered is incorrect. Request a new code and try again.']);
+        $st[$id]['verified'] = true; file_put_contents($file, json_encode($st)); $json(['success' => true]); }
+    if ($sub === 'register') { if (($in['pin'] ?? '') === '000000') $err('(#133005) Two step verification PIN Mismatch', 133005);
+        $st[$id]['registered'] = true; file_put_contents($file, json_encode($st)); $json(['success' => true]); }
+    $json(['id' => $id, 'display_phone_number' => $n['display_phone_number'], 'verified_name' => $n['verified_name'], 'name_status' => 'PENDING_REVIEW',
+        'code_verification_status' => $n['verified'] ? 'VERIFIED' : 'NOT_VERIFIED', 'quality_rating' => 'UNKNOWN',
+        'status' => $n['registered'] ? 'CONNECTED' : 'PENDING', 'platform_type' => $n['registered'] ? 'CLOUD_API' : 'NOT_APPLICABLE']);
+})();
 $store = __DIR__.'/mock-meta-templates.json';
 $tpls = is_file($store) ? json_decode(file_get_contents($store), true) : [
     ['id' => 'MOCKTPL1', 'name' => 'order_confirmation', 'language' => 'en_US', 'status' => 'APPROVED', 'category' => 'UTILITY', 'quality_score' => ['score' => 'GREEN'],

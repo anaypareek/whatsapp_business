@@ -125,6 +125,27 @@ class WhatsAppService
         ]));
     }
 
+    // ---- Add a new number (Number Master → Add number) ----
+    /** POST /{waba-id}/phone_numbers → ['id' => new phone-number-id]. */
+    public function createPhoneNumber(string $wabaId, string $cc, string $phoneNumber, string $verifiedName): array
+    {
+        return $this->check($this->client()->post($this->baseUrl()."/{$wabaId}/phone_numbers", [
+            'cc' => $cc, 'phone_number' => $phoneNumber, 'verified_name' => $verifiedName,
+        ]));
+    }
+
+    /** POST /{phone-number-id}/request_code (code_method SMS|VOICE). */
+    public function requestCode(string $phoneNumberId, string $method, string $language = 'en_US'): array
+    {
+        return $this->check($this->client()->post($this->baseUrl()."/{$phoneNumberId}/request_code", ['code_method' => $method, 'language' => $language]));
+    }
+
+    /** POST /{phone-number-id}/verify_code. */
+    public function verifyCode(string $phoneNumberId, string $code): array
+    {
+        return $this->check($this->client()->post($this->baseUrl()."/{$phoneNumberId}/verify_code", ['code' => $code]));
+    }
+
     // ---- Message templates (WABA /message_templates) ----
     protected function waba(?string $wabaId): string
     {
