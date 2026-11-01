@@ -52,7 +52,17 @@ class _WaAppState extends State<WaApp> {
     await s.session.restore();
     if (s.session.loggedIn) _startSession();
     try { await s.push?.init(); } catch (_) {}
-    if (s.session.loggedIn) s.push?.register();
+    if (s.session.loggedIn) _registerPush(report: true);
+  }
+
+  /// Registers this phone for push and, if it fails, says why (it used to fail silently => "0 devices" in the portal).
+  Future<void> _registerPush({bool report = false}) async {
+    final p = s.push;
+    if (p == null) return;
+    try { await p.register(); } catch (e) { p.reason = '$e'; }
+    if (report && !p.registered && p.reason != null && p.reason != 'Not signed in') {
+      _msg.currentState?.showSnackBar(SnackBar(content: Text('Notifications off: ${p.reason}'), duration: const Duration(seconds: 10)));
+    }
   }
 
   void _startSession() => s.poller.start();
@@ -60,7 +70,7 @@ class _WaAppState extends State<WaApp> {
   Future<void> _onLoggedIn() async {
     // The login itself already succeeded; post-login setup problems must not surface as a failed sign-in.
     try { s.store.clear(); _startSession(); } catch (e) { debugPrint('post-login start failed: $e'); }
-    try { s.push?.register(); } catch (_) {}
+    _registerPush(report: true);
     final w = s.session.storageWarning;
     if (w != null) _msg.currentState?.showSnackBar(SnackBar(content: Text(w), duration: const Duration(seconds: 8)));
   }

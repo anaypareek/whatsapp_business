@@ -105,17 +105,33 @@ class PushService {
 
   /// After login (and on each start while logged in): ask permission, register this device.
   Future<void> register() async {
-    try { await init(); } catch (_) {}
-    if (!available || api.token == null) return;
+    try { await init(); } catch (e) { reason = 'Push init failed: $e'; }
+    // A failed/unconfigured init must not stick for the whole process: retry once (e.g. the admin uploaded the config after app start).
+    if (!available) { _initF = null; try { await init(); } catch (e) { reason = 'Push init failed: $e'; } }
+    if (!available) { registered = false; debugPrint('push: not registering: $reason'); return; }
+    if (api.token == null) { reason = 'Not signed in'; return; }
     try {
-      await FirebaseMessaging.instance.requestPermission(alert: true, badge: true, sound: true); // Android 13+ POST_NOTIFICATIONS
+      final perm = await FirebaseMessaging.instance.requestPermission(alert: true, badge: true, sound: true); // Android 13+ POST_NOTIFICATIONS
+      if (perm.authorizationStatus == AuthorizationStatus.denied) reason = 'Notifications are blocked for this app in Android settings';
       _token = await FirebaseMessaging.instance.getToken();
-      if (_token != null) await _send(_token!);
+      if (_token == null) { reason = 'Firebase returned no device token'; return; }
       _refreshSub ??= FirebaseMessaging.instance.onTokenRefresh.listen((t) { _token = t; _send(t); });
-    } catch (e) { debugPrint('push: register failed $e'); }
+      await _send(_token!);
+    } catch (e) {
+      reason = 'Could not get a push token from Firebase: $e';
+      debugPrint('push: register failed $e');
+    }
   }
 
-  Future<void> _send(String t) => api.post(AppConfig.devicesPath, {'token': t, 'platform': 'android', 'app_version': AppConfig.version}).catchError((_) => null);
+  /// True once the server accepted this device.
+  bool registered = false;
+
+  Future<void> _send(String t) async {
+    try {
+      await api.post(AppConfig.devicesPath, {'token': t, 'platform': 'android', 'app_version': AppConfig.version});
+      registered = true; reason = null;
+    } catch (e) { registered = false; reason = 'Server rejected device registration: $e'; }
+  }
 
   /// On logout (token still valid): remove this device on the server and drop the FCM token.
   Future<void> unregister() async {
