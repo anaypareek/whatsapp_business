@@ -16,6 +16,7 @@ class SettingsController extends Controller
             if (in_array($k, Setting::SECRET)) $out[$k.'_set'] = (bool) $v;
         }
         $out['webhook_url'] = rtrim(config('app.url'), '/').'/api/webhook/whatsapp';
+        $out['ai_defaults'] = ['base_url' => \App\Services\AiReplyService::DEFAULT_BASE_URL, 'model' => \App\Services\AiReplyService::DEFAULT_MODEL, 'global_max_per_hour' => \App\Services\AiReplyService::DEFAULT_GLOBAL_PER_HOUR];
         $out['graph_version'] = config('services.whatsapp.graph_version');
         return $out;
     }
@@ -31,7 +32,7 @@ class SettingsController extends Controller
             if (in_array($k, Setting::SECRET) && ($v === null || $v === '' || str_starts_with($v, '••••'))) continue;
             Setting::put($k, $v);
         }
-        if (Setting::get('waba_id') && Setting::get('access_token')) \App\Services\WabaHealth::refreshQuietly();
+        if (array_intersect(array_keys($d), ['app_id', 'app_secret', 'access_token', 'waba_id']) && Setting::get('waba_id') && Setting::get('access_token')) \App\Services\WabaHealth::refreshQuietly();
         return $this->show();
     }
 }

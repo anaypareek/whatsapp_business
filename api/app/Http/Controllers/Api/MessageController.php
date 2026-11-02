@@ -50,12 +50,14 @@ class MessageController extends Controller
         if ($r->filled('phone_number_id')) $q->where('phone_number_id', $r->phone_number_id);
         $rows = $q->get();
         $last = Message::whereIn('id', $rows->pluck('last_id'))->get()->keyBy('id');
+        $flag = \App\Models\AiContactState::flagged();
         $names = Message::whereIn('contact_wa_id', $rows->pluck('contact_wa_id'))->whereNotNull('contact_name')
             ->orderByDesc('id')->get(['contact_wa_id', 'contact_name'])->unique('contact_wa_id')->pluck('contact_name', 'contact_wa_id');
         return $rows->map(fn ($row) => [
             'phone_number_id' => $row->phone_number_id, 'contact_wa_id' => $row->contact_wa_id,
             'contact_name' => $names[$row->contact_wa_id] ?? null, 'unread' => (int) $row->unread,
             'last_message' => $last[$row->last_id] ?? null,
+            'needs_human' => isset($flag[$row->phone_number_id.'-'.$row->contact_wa_id]),
         ])->sortByDesc(fn ($c) => $c['last_message']?->id)->values();
     }
 

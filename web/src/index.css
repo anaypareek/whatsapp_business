@@ -584,3 +584,6 @@ tr.dim td{opacity:.55}
 .tpl-map{display:flex;flex-direction:column;gap:10px;border:1px solid var(--line);border-radius:12px;padding:12px;background:#FFFBF7}
 .tpl-preview{white-space:pre-wrap;font-size:13px;background:#fff;border:1px dashed var(--line);border-radius:10px;padding:10px;color:#44403C}
 .alert-warn{background:#FEF3C7;color:#92400E;border-radius:8px;padding:8px 10px}
+
+.pill.human { background: #f59e0b; margin-right: 4px; font-style: normal; }
+.src.ai { color: #7c3aed; }

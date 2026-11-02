@@ -10,6 +10,7 @@ import { TemplateSender } from './templates'
 import { ClientSelect } from './clients'
 import { AddNumberWizard, ONBOARD_STEPS } from './add-number'
 import { Greetings, UNSUPPORTED_NOTE } from './greetings'
+import { AiReplies, AiProviderSettings } from './ai-replies'
 
 // ---------------- Users ----------------
 export function Users({ user }) {
@@ -213,7 +214,7 @@ function Bubble({ m }) {
     {m.direction === 'in' && m.media_id && !m.media_url && <div className="muted small">[{m.type}{m.filename ? `: ${m.filename}` : ''}]</div>}
     {media}{m.body && <div className="text">{m.body}</div>}
     {m.type === 'unsupported' && !m.body && <div className="unsupported-note">{UNSUPPORTED_NOTE}</div>}
-    <div className="meta">{(m.is_auto || ['auto_reply', 'flow', 'greeting', 'off_hours'].includes(m.source)) && <span className="src" title={m.source}><Bot size={11} /> auto</span>}{m.source === 'api' && <span className="src">API</span>}
+    <div className="meta">{m.source === 'ai' ? <span className="src ai" title="AI reply"><Bot size={11} /> ai</span> : (m.is_auto || ['auto_reply', 'flow', 'greeting', 'off_hours'].includes(m.source)) && <span className="src" title={m.source}><Bot size={11} /> auto</span>}{m.source === 'api' && <span className="src">API</span>}
       {m.source === 'test' && <span className="src">test</span>}{fmtShort(m.created_at)}{m.direction === 'out' && <span className={`tick ${m.status}`} title={m.error || m.status}>{TICK[m.status]}</span>}</div>
     {m.status === 'failed' && m.error && <div className="msg-err"><AlertCircle size={12} /> {m.error}</div>}
   </div></div>)
@@ -264,7 +265,7 @@ export function Chat({ ep = ADMIN_EP }) {
               <Avatar name={c.contact_name || c.contact_wa_id} size={46} />
               <div className="grow"><div className="row between"><b className="ellipsis">{c.contact_name || `+${c.contact_wa_id}`}</b><small className={c.unread ? 'hot' : 'muted'}>{fmtShort(c.last_message?.created_at)}</small></div>
                 <div className="row between"><span className="muted ellipsis">{c.last_message?.direction === 'out' && <span className={`tick ${c.last_message.status}`}>{TICK[c.last_message.status]}</span>}{c.last_message?.body || `[${c.last_message?.type}]`}</span>
-                  {c.unread > 0 && <em className="pill">{c.unread}</em>}</div>
+                  {c.needs_human && <em className="pill human" title="AI handed this chat to a team member">needs human</em>}{c.unread > 0 && <em className="pill">{c.unread}</em>}</div>
                 <small className="via">via {numName(c.phone_number_id)}</small></div>
             </div>)
           })}
@@ -300,6 +301,7 @@ export function AutoReplies() {
   return (<div className="page">
     <PageHeader icon={Bot} title="Auto-replies" subtitle="Reply automatically when an incoming message matches a rule" />
     <Greetings scope="admin" />
+    <AiReplies scope="admin" />
     <div className="grid-form">
       <Card title={editId ? 'Edit rule' : 'New rule'} icon={editId ? Pencil : Plus}>
         <form className="form" onSubmit={save}>
@@ -378,6 +380,7 @@ export function Settings() {
             <p className="muted small">Graph API {s.graph_version}</p></Card>
         </div>
       </div>}
+    {s && <AiProviderSettings />}
     {s && <InstagramSettings />}
     {s && <PushSettings />}
   </div>)

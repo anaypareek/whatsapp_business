@@ -13,11 +13,11 @@ use Illuminate\Support\Carbon;
 
 class WebhookProcessor
 {
-    public function __construct(protected MessagingService $messaging, protected FlowEngine $flows) {}
+    public function __construct(protected MessagingService $messaging, protected FlowEngine $flows, protected AiReplyService $ai) {}
 
     public function handle(array $payload): array
     {
-        $stats = ['messages' => 0, 'statuses' => 0, 'auto_replies' => 0, 'flows' => 0, 'template_events' => 0, 'greetings' => 0];
+        $stats = ['messages' => 0, 'statuses' => 0, 'auto_replies' => 0, 'flows' => 0, 'template_events' => 0, 'greetings' => 0, 'ai' => 0];
         foreach ($payload['entry'] ?? [] as $entry) {
             foreach ($entry['changes'] ?? [] as $change) {
                 $field = $change['field'] ?? null;
@@ -58,11 +58,13 @@ class WebhookProcessor
                     ]);
                     $stats['messages']++;
                     if ($phone) \App\Jobs\SendIncomingMessagePush::dispatchAfterResponse($msg->id); // client phones + Master app
-                    // one auto-reply per inbound: flows/sessions first, then keyword rules, then greeting / off-hours
+                    // one auto-reply per inbound: flows/sessions first, then keyword rules, then greeting / off-hours, then AI reply
                     if (! $phone) continue;
                     if ($this->flows->handle($phone, $msg)) $stats['flows']++;
                     elseif ($body && $this->autoReply($phone, $msg)) $stats['auto_replies']++;
                     elseif ($this->greeting($phone, $msg)) $stats['greetings']++;
+                    elseif ($this->ai->skipReason($phone, $msg) === null) { \App\Jobs\GenerateAiReply::dispatchAfterResponse($msg->id); $stats['ai']++; } // last resort
+
                 }
                 foreach ($v['statuses'] ?? [] as $s) {
                     $orig = Message::where('wamid', $s['id'])->first();
