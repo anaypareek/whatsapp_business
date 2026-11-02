@@ -2,6 +2,7 @@
 namespace App\Services;
 
 use App\Models\AiContactState;
+use App\Models\AiProductImage;
 use App\Models\AiReplySetting;
 use App\Models\Message;
 use App\Models\PhoneNumber;
@@ -59,51 +60,92 @@ class AiReplyService
         return null;
     }
 
-    public static function systemPrompt(PhoneNumber $phone, ?string $kb): string
+    public static function systemPrompt(PhoneNumber $phone, ?string $kb, string $query = ''): string
     {
         $biz = $phone->name ?: 'our business';
         $kb = trim((string) $kb);
-        return "You are the friendly WhatsApp assistant for {$biz}. Reply in the customer's language, warm and conversational, short (1-3 sentences), with a few fitting emojis.\n"
+        $p = "You are the friendly WhatsApp assistant for {$biz}. Reply in the customer's language, warm and conversational, short (1-3 sentences), with a few fitting emojis.\n"
             ."For small talk (hi, hello, how are you, thanks, etc.) reply warmly and then ask: \"How can I help you? 😊\".\n"
-            ."STRICT RULES: Never invent facts, prices, stock, delivery times, policies, links or contact details. Only use facts from the KNOWLEDGE BASE below. "
-            ."If the customer asks something that is not answered in the knowledge base, or you are unsure, or they ask for a human, reply with exactly ".self::HANDOFF_TOKEN." and nothing else.\n"
-            ."KNOWLEDGE BASE:\n".($kb !== '' ? $kb : '(empty - answer only small talk; anything else needs '.self::HANDOFF_TOKEN.')');
+            ."STRICT RULES: Never invent facts, prices, stock, delivery times, policies, links or contact details. Only use facts from the KNOWLEDGE BASE, CONTEXT and EXAMPLES below. "
+            ."If the customer asks something that is not answered there, or you are unsure, or they ask for a human, reply with exactly ".self::HANDOFF_TOKEN." and nothing else.\n"
+            ."KNOWLEDGE BASE:\n".($kb !== '' ? mb_substr($kb, 0, 4000) : '(empty)');
+        $chunks = AiKnowledge::chunks($phone, $query);
+        if ($chunks->isNotEmpty()) $p .= "\nCONTEXT (from uploaded documents):\n".$chunks->pluck('content')->implode("\n---\n");
+        $ex = AiKnowledge::examples($phone, $query);
+        if ($ex->isNotEmpty()) $p .= "\nEXAMPLES (approved answers; follow them):\n".$ex->map(fn ($e) => 'Q: '.mb_substr($e->question, 0, 300)."\nA: ".mb_substr($e->answer, 0, 500))->implode("\n");
+        $imgs = AiKnowledge::images($phone, $query);
+        if ($imgs->isNotEmpty()) $p .= "\nPRODUCT IMAGES: if the customer asks for a picture/photo of one of these, add the marker [IMAGE:id] to your reply (at most one): "
+            .$imgs->map(fn ($i) => "[IMAGE:{$i->id}] {$i->name}".($i->tags ? " ({$i->tags})" : ''))->implode('; ').'. Never use any other id.';
+        if (OrderLookup::configured()) $p .= "\nORDERS: if the customer asks about their order status/delivery, reply with exactly [ORDER_LOOKUP:<order id>] or [ORDER_LOOKUP:mine] if they gave no id. Never guess order details.";
+        return $p;
     }
 
-    /** Generate and send the reply. Returns 'sent', 'handoff' or the skip/error reason. */
+    /** One chat-completions call. Returns the text or null (error / timeout); never logs the key or bodies. */
+    public function complete(PhoneNumber $phone, ?string $kb, array $history): ?string
+    {
+        $cfg = static::config();
+        if (! $cfg['key']) return null;
+        $query = collect($history)->where('role', 'user')->last()['content'] ?? '';
+        try {
+            $res = Http::withToken($cfg['key'])->acceptJson()->timeout(self::TIMEOUT)->connectTimeout(5)
+                ->post($cfg['base_url'].'/chat/completions', [
+                    'model' => $cfg['model'], 'max_tokens' => self::MAX_TOKENS, 'temperature' => 0.4,
+                    'messages' => array_merge([['role' => 'system', 'content' => static::systemPrompt($phone, $kb, $query)]], array_slice($history, -self::HISTORY)),
+                ]);
+            if (! $res->successful()) { Log::warning('AI reply: provider HTTP '.$res->status(), ['phone_number_id' => $phone->id]); return null; }
+            return trim((string) ($res->json('choices.0.message.content') ?? ''));
+        } catch (Throwable $e) {
+            Log::warning('AI reply: provider unreachable ('.class_basename($e).')', ['phone_number_id' => $phone->id]);
+            return null;
+        }
+    }
+
+    /** Parse markers in a model answer: ['text', 'handoff', 'image' (AiProductImage|null), 'order' (string|null)]. Images are scoped to the number. */
+    public static function parse(PhoneNumber $phone, string $text): array
+    {
+        $out = ['text' => $text, 'handoff' => str_contains($text, self::HANDOFF_TOKEN), 'image' => null, 'order' => null];
+        if (preg_match('/\[ORDER_LOOKUP:\s*([^\]]{1,64})\]/i', $text, $m)) $out['order'] = trim($m[1]);
+        if (preg_match('/\[IMAGE:\s*(\d+)\]/i', $text, $m)) $out['image'] = AiProductImage::where('phone_number_id', $phone->id)->find((int) $m[1]);
+        $out['text'] = trim(preg_replace('/\s*\[(IMAGE|ORDER_LOOKUP):[^\]]*\]\s*/i', ' ', str_replace(self::HANDOFF_TOKEN, '', $text)));
+        return $out;
+    }
+
+    protected function handoff(PhoneNumber $phone, Message $in, string $reason): string
+    {
+        AiContactState::updateOrCreate(['phone_number_id' => $phone->id, 'contact_wa_id' => $in->contact_wa_id],
+            ['needs_human' => true, 'handoff_at' => now(), 'reason' => mb_substr($reason, 0, 255)]);
+        $this->messaging->send($phone, $in->contact_wa_id, self::HANDOFF_TEXT, source: 'ai');
+        return 'handoff';
+    }
+
+    /** Generate and send the reply. Returns 'sent', 'image', 'order', 'handoff' or the skip/error reason. */
     public function reply(PhoneNumber $phone, Message $in): string
     {
         if ($why = $this->skipReason($phone, $in)) return $why;
         // another reply (staff/flow) already went out after this message: stay quiet
         if (Message::where('phone_number_id', $phone->id)->where('contact_wa_id', $in->contact_wa_id)->where('direction', 'out')->where('id', '>', $in->id)->exists()) return 'already_replied';
         $s = AiReplySetting::where('phone_number_id', $phone->id)->first();
-        $cfg = static::config();
         $history = Message::where('phone_number_id', $phone->id)->where('contact_wa_id', $in->contact_wa_id)->where('id', '<=', $in->id)
             ->whereNotNull('body')->orderByDesc('id')->limit(self::HISTORY)->get()->reverse()
             ->map(fn ($m) => ['role' => $m->direction === 'in' ? 'user' : 'assistant', 'content' => mb_substr((string) $m->body, 0, 1000)])->values()->all();
-        try {
-            $res = Http::withToken($cfg['key'])->acceptJson()->timeout(self::TIMEOUT)->connectTimeout(5)
-                ->post($cfg['base_url'].'/chat/completions', [
-                    'model' => $cfg['model'], 'max_tokens' => self::MAX_TOKENS, 'temperature' => 0.4,
-                    'messages' => array_merge([['role' => 'system', 'content' => static::systemPrompt($phone, $s->knowledge_base)]], $history),
-                ]);
-            if (! $res->successful()) {
-                Log::warning('AI reply: provider HTTP '.$res->status(), ['phone_number_id' => $phone->id]); // no key, no body
-                return 'provider_error';
-            }
-            $text = trim((string) ($res->json('choices.0.message.content') ?? ''));
-        } catch (Throwable $e) {
-            Log::warning('AI reply: provider unreachable ('.class_basename($e).')', ['phone_number_id' => $phone->id]);
-            return 'provider_error';
-        }
+        $text = $this->complete($phone, $s->knowledge_base, $history);
+        if ($text === null) return 'provider_error';
         if ($text === '') return 'empty';
-        $handoff = str_contains($text, self::HANDOFF_TOKEN);
-        if ($handoff) {
-            $text = self::HANDOFF_TEXT;
-            AiContactState::updateOrCreate(['phone_number_id' => $phone->id, 'contact_wa_id' => $in->contact_wa_id],
-                ['needs_human' => true, 'handoff_at' => now(), 'reason' => mb_substr((string) $in->body, 0, 255)]);
+        $r = static::parse($phone, $text);
+        if ($r['order'] !== null) {
+            $id = strtolower($r['order']) === 'mine' ? null : $r['order'];
+            $orders = app(OrderLookup::class)->lookup($in->contact_wa_id, $id); // always the sender's own phone
+            if (! $orders) return $this->handoff($phone, $in, 'Order lookup '.($orders === null ? 'failed' : 'not found').': '.$in->body);
+            $this->messaging->send($phone, $in->contact_wa_id, OrderLookup::format($orders), source: 'ai');
+            return 'order';
         }
-        $this->messaging->send($phone, $in->contact_wa_id, mb_substr($text, 0, 4000), source: 'ai');
-        return $handoff ? 'handoff' : 'sent';
+        if ($r['handoff']) return $this->handoff($phone, $in, (string) $in->body);
+        if ($r['image']) {
+            $this->messaging->send($phone, $in->contact_wa_id, mb_substr($r['text'], 0, 1000) ?: $r['image']->name, mediaUrl: $r['image']->url, source: 'ai');
+            return 'image';
+        }
+        if ($r['text'] === '') return 'empty';
+        $this->messaging->send($phone, $in->contact_wa_id, mb_substr($r['text'], 0, 4000), source: 'ai');
+        return 'sent';
     }
 }
