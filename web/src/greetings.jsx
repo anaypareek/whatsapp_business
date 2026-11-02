@@ -52,7 +52,7 @@ function GreetingForm({ P, row, reload }) {
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>{DAYS.map(([d, l]) => <Button key={d} size="sm" variant={f.hours_days.includes(d) ? 'primary' : 'secondary'} onClick={() => day(d)}>{l}</Button>)}</div>
         <Field label="Off-hours text" hint="Sent instead of the greeting outside business hours (same cooldown)"><textarea rows={2} value={f.off_hours_text} onChange={set('off_hours_text')} placeholder="We're closed now, {name}. We'll reply from 9 AM." /></Field>
       </>}
-      <p className="muted small">Order: keyword auto-replies → automation flows → greeting. One incoming message gets at most one auto-reply.</p>
+      <p className="muted small">Order: automation flows → keyword auto-replies → greeting. One incoming message gets at most one auto-reply.</p>
       <div className="row"><Button type="submit" variant="primary" icon={Check} loading={busy}>Save greeting</Button></div>
     </form>
   </Card>)

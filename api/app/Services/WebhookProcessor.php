@@ -58,10 +58,10 @@ class WebhookProcessor
                     ]);
                     $stats['messages']++;
                     if ($phone) \App\Jobs\SendIncomingMessagePush::dispatchAfterResponse($msg->id); // client phones + Master app
-                    // one auto-reply per inbound: keyword rules, then flows/sessions, then greeting / off-hours
+                    // one auto-reply per inbound: flows/sessions first, then keyword rules, then greeting / off-hours
                     if (! $phone) continue;
-                    if ($body && $this->autoReply($phone, $msg)) $stats['auto_replies']++;
-                    elseif ($this->flows->handle($phone, $msg)) $stats['flows']++;
+                    if ($this->flows->handle($phone, $msg)) $stats['flows']++;
+                    elseif ($body && $this->autoReply($phone, $msg)) $stats['auto_replies']++;
                     elseif ($this->greeting($phone, $msg)) $stats['greetings']++;
                 }
                 foreach ($v['statuses'] ?? [] as $s) {
