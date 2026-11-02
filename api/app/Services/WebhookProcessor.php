@@ -128,9 +128,12 @@ class WebhookProcessor
         if (! $g || ! $g->enabled) return false;
         $off = $g->isOffHours();
         $grp = GreetingGroup::forContact($phone->id, $in->contact_wa_id);
-        // group text wins when set; otherwise fall back to the number's default text
-        $text = trim((string) ($off ? ($grp?->off_hours_text ?: $g->off_hours_text) : ($grp?->greeting_text ?: $g->greeting_text)));
-        if ($text === '') return false;
+        // group slot (template or text) wins when set; otherwise the number's default slot
+        $slot = $off ? 'off_hours' : 'greeting';
+        $owner = ($grp && ($grp->{"{$slot}_template_id"} || trim((string) $grp->{"{$slot}_text"}) !== '')) ? $grp : $g;
+        $tpl = $owner->{"{$slot}_template_id"} ? \App\Models\MessageTemplate::find($owner->{"{$slot}_template_id"}) : null;
+        $text = trim((string) $owner->{"{$slot}_text"});
+        if (! $tpl && $text === '') return false;
         $contact = $in->contact_wa_id;
         $conv = Message::where('phone_number_id', $phone->id)->where('contact_wa_id', $contact);
         if ($g->mode === 'new_only' && (clone $conv)->where('direction', 'in')->where('id', '!=', $in->id)->exists()) return false;
@@ -139,6 +142,7 @@ class WebhookProcessor
         if ((clone $conv)->where('direction', 'out')->whereIn('source', ['greeting', 'off_hours'])->where('created_at', '>=', $since)->exists()) return false;
         // a person (admin/staff) already replied manually in the window
         if ((clone $conv)->where('direction', 'out')->where('is_auto', false)->whereNotIn('source', MessagingService::AUTO_SOURCES)->where('created_at', '>=', $since)->exists()) return false;
+        if ($tpl) return (bool) GreetingTemplates::send($this->messaging, $phone, $in, $tpl, $owner->{"{$slot}_template_params"}, $slot);
         $text = str_replace('{name}', trim((string) $in->contact_name), $text);
         $this->messaging->send($phone, $contact, $text, mediaUrl: (! $off && $g->image_url) ? $g->image_url : null, source: $off ? 'off_hours' : 'greeting');
         return true;

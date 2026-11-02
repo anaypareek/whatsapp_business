@@ -80,6 +80,7 @@ Route::middleware(['auth:sanctum', EnsureClient::class])->prefix('client')->grou
     Route::get('/greetings', [Api\GreetingController::class, 'index']);
     Route::put('/greetings/{phoneNumber}', [Api\GreetingController::class, 'update'])->whereNumber('phoneNumber');
     Route::get('/greetings/{phoneNumber}/contacts', [Api\GreetingController::class, 'contacts'])->whereNumber('phoneNumber');
+    Route::get('/greetings/{phoneNumber}/templates', [Api\GreetingController::class, 'templates'])->whereNumber('phoneNumber');
     Route::post('/greetings/{phoneNumber}/groups', [Api\GreetingController::class, 'storeGroup'])->whereNumber('phoneNumber');
     Route::put('/greeting-groups/{group}', [Api\GreetingController::class, 'updateGroup'])->whereNumber('group');
     Route::delete('/greeting-groups/{group}', [Api\GreetingController::class, 'destroyGroup'])->whereNumber('group');
@@ -138,6 +139,7 @@ Route::middleware(['auth:sanctum', EnsureStaff::class])->group(function () {
     Route::get('/greetings', [Api\GreetingController::class, 'index']);
     Route::put('/greetings/{phoneNumber}', [Api\GreetingController::class, 'update'])->whereNumber('phoneNumber');
     Route::get('/greetings/{phoneNumber}/contacts', [Api\GreetingController::class, 'contacts'])->whereNumber('phoneNumber');
+    Route::get('/greetings/{phoneNumber}/templates', [Api\GreetingController::class, 'templates'])->whereNumber('phoneNumber');
     Route::post('/greetings/{phoneNumber}/groups', [Api\GreetingController::class, 'storeGroup'])->whereNumber('phoneNumber');
     Route::put('/greeting-groups/{group}', [Api\GreetingController::class, 'updateGroup'])->whereNumber('group');
     Route::delete('/greeting-groups/{group}', [Api\GreetingController::class, 'destroyGroup'])->whereNumber('group');

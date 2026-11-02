@@ -7,8 +7,8 @@ use Illuminate\Support\Carbon;
 class GreetingSetting extends Model
 {
     public const TZ = 'Asia/Kolkata';
-    protected $fillable = ['phone_number_id', 'enabled', 'mode', 'greeting_text', 'image_url', 'cooldown_hours', 'hours_enabled', 'hours_start', 'hours_end', 'hours_days', 'off_hours_text'];
-    protected $casts = ['enabled' => 'boolean', 'hours_enabled' => 'boolean', 'cooldown_hours' => 'integer', 'hours_days' => 'array'];
+    protected $fillable = ['phone_number_id', 'enabled', 'mode', 'greeting_text', 'image_url', 'cooldown_hours', 'hours_enabled', 'hours_start', 'hours_end', 'hours_days', 'off_hours_text', 'greeting_template_id', 'greeting_template_params', 'off_hours_template_id', 'off_hours_template_params'];
+    protected $casts = ['greeting_template_params' => 'array', 'off_hours_template_params' => 'array', 'enabled' => 'boolean', 'hours_enabled' => 'boolean', 'cooldown_hours' => 'integer', 'hours_days' => 'array'];
     protected $attributes = ['enabled' => false, 'mode' => 'every', 'cooldown_hours' => 24, 'hours_enabled' => false];
 
     /** Business hours in Asia/Kolkata; overnight ranges (e.g. 20:00-02:00) are supported. */
