@@ -63,7 +63,7 @@ class PhoneNumberController extends Controller
         try { $res = $wa->registerNumber($phoneNumber->phone_number_id, $d['pin']); }
         catch (Throwable $e) {
             if ($phoneNumber->onboarding_step) $phoneNumber->update(['onboarding_error' => $e->getMessage()]);
-            return $this->fail($e, 502, ['registered' => false, 'number' => $phoneNumber->load('client:id,name,company,is_active')]);
+            return $this->fail($e, 502, ['registered' => false, 'number' => $phoneNumber->load('client:id,name,company,is_active'), 'hint' => PhoneNumberOnboardingController::stillOnAppHint($e)]);
         }
         unset($d);
         if ($phoneNumber->onboarding_step) $phoneNumber->update(['onboarding_step' => 'registered', 'registered_at' => now(), 'onboarding_error' => null]);

@@ -10,13 +10,14 @@ export const ONBOARD_STEPS = [['created', 'Add number'], ['code_requested', 'Ver
 const stepIndex = (s) => ({ created: 1, code_requested: 1, verified: 2, registered: 3 }[s] ?? 0)
 const toneFor = (v) => ({ APPROVED: 'green', CONNECTED: 'green', VERIFIED: 'green', GREEN: 'green', AVAILABLE_WITHOUT_REVIEW: 'green', PENDING_REVIEW: 'amber', PENDING: 'amber', NOT_VERIFIED: 'amber', YELLOW: 'amber', DECLINED: 'red', RED: 'red', EXPIRED: 'red', FLAGGED: 'red' }[v] || 'gray')
 
-export const metaErr = (err) => ({ message: err.data?.message || err.message, code: err.data?.error_code, log_id: err.data?.log_id, meta: err.data?.meta, errors: err.data?.errors })
+export const metaErr = (err) => ({ message: err.data?.message || err.message, code: err.data?.error_code, log_id: err.data?.log_id, meta: err.data?.meta, hint: err.data?.hint, errors: err.data?.errors })
 
 /** Shows Meta's error fields clearly: message, code/subcode, error_user_title/msg, hint, fbtrace id. */
 export function MetaError({ e, title = 'Meta returned an error' }) {
   if (!e) return null
   const m = e.meta || {}
   return (<div className="alert error meta-error" role="alert"><AlertCircle size={16} /><div>
+    {e.hint && <div className="break" style={{ marginBottom: 6 }}><b>{e.hint}</b></div>}
     <b>{title}{m.meta_code ? ` (code ${m.meta_code}${m.meta_subcode ? `/${m.meta_subcode}` : ''})` : e.code ? ` (${e.code})` : ''}</b>
     {m.error_user_msg ? <div className="break"><b>{m.error_user_title ? `${m.error_user_title}: ` : ''}</b>{m.error_user_msg}</div> : <div className="break">{e.message}</div>}
     {(m.meta_message || m.meta_code) && <dl className="meta-err-kv">

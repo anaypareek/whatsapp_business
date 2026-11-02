@@ -2,6 +2,7 @@
 namespace Tests\Feature;
 
 use App\Models\Client;
+use App\Http\Controllers\Api\PhoneNumberOnboardingController;
 use App\Models\PhoneNumber;
 use App\Models\Setting;
 use App\Models\User;
@@ -110,8 +111,22 @@ class AddNumberFlowTest extends TestCase
         $n = PhoneNumber::create(['phone_number_id' => self::NEW_ID, 'display_number' => '+91 1', 'onboarding_step' => 'created']);
         $this->admin()->postJson("/api/phone-numbers/{$n->id}/request-code", ['code_method' => 'SMS'])->assertStatus(502)
             ->assertJsonPath('meta.meta_code', 136024)->assertJsonPath('meta.error_user_msg', 'Too many requests. Please wait before requesting another code.')
-            ->assertJsonPath('number.onboarding_step', 'created');
+            ->assertJsonPath('number.onboarding_step', 'created')->assertJsonPath('hint', PhoneNumberOnboardingController::STILL_ON_APP_HINT);
         $this->assertStringContainsString('Too many requests', $n->fresh()->onboarding_error);
+    }
+
+    public function test_request_code_136024_servers_unavailable_returns_still_on_app_hint_and_raw_error(): void
+    {
+        Http::fake(['graph.facebook.com/*' => self::err(136024, 'Request code error', ['error_subcode' => 2388091, 'error_user_title' => 'Servers Temporarily Unavailable',
+            'error_user_msg' => 'Our servers are temporarily unavailable. Please wait 1 hour and try again.'])]);
+        $n = PhoneNumber::create(['phone_number_id' => self::NEW_ID, 'display_number' => '+91 1', 'onboarding_step' => 'created']);
+        $this->admin()->postJson("/api/phone-numbers/{$n->id}/request-code", ['code_method' => 'SMS'])->assertStatus(502)
+            ->assertJsonPath('hint', PhoneNumberOnboardingController::STILL_ON_APP_HINT)
+            ->assertJsonPath('meta.meta_code', 136024)->assertJsonPath('meta.meta_subcode', 2388091)->assertJsonPath('meta.meta_message', 'Request code error')
+            ->assertJsonPath('meta.error_user_msg', 'Our servers are temporarily unavailable. Please wait 1 hour and try again.');
+        // register with "already registered" subcode gets the same hint; unrelated errors get none
+        Http::fake(['graph.facebook.com/*' => self::err(100, 'Invalid parameter', ['error_subcode' => 2388001])]);
+        $this->admin()->postJson("/api/phone-numbers/{$n->id}/register", ['pin' => '123456'])->assertStatus(502)->assertJsonPath('hint', PhoneNumberOnboardingController::STILL_ON_APP_HINT);
     }
 
     public function test_wrong_otp_error(): void
@@ -126,7 +141,7 @@ class AddNumberFlowTest extends TestCase
     {
         Http::fake(['graph.facebook.com/*' => self::err(133005, '(#133005) Two step verification PIN Mismatch')]);
         $n = PhoneNumber::create(['phone_number_id' => self::NEW_ID, 'display_number' => '+91 1', 'onboarding_step' => 'verified']);
-        $this->admin()->postJson("/api/phone-numbers/{$n->id}/register", ['pin' => '111111'])->assertStatus(502)->assertJsonPath('meta.meta_code', 133005)->assertJsonPath('registered', false);
+        $this->admin()->postJson("/api/phone-numbers/{$n->id}/register", ['pin' => '111111'])->assertStatus(502)->assertJsonPath('meta.meta_code', 133005)->assertJsonPath('registered', false)->assertJsonPath('hint', null);
         $this->assertSame('verified', $n->fresh()->onboarding_step);
         $this->assertStringContainsString('PIN', $n->fresh()->onboarding_error);
     }

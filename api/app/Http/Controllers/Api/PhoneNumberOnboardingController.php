@@ -19,6 +19,16 @@ use Throwable;
  */
 class PhoneNumberOnboardingController extends Controller
 {
+    public const STILL_ON_APP_HINT = 'This number may still be registered on the WhatsApp or WhatsApp Business app. Delete that WhatsApp account on the phone (Settings > Account > Delete my account), wait 1 hour, then try again.';
+
+    /** request_code / register errors that usually mean the number is still on the consumer/Business app → friendly hint shown above Meta's raw error. */
+    public static function stillOnAppHint(Throwable $e): ?string
+    {
+        if (! $e instanceof \App\Services\MetaApiException) return null;
+        $code = (int) $e->metaCode(); $sub = (int) $e->metaSubcode();
+        return ($code === 136024 || in_array($sub, [2388001, 2388012, 2388091], true)) ? self::STILL_ON_APP_HINT : null;
+    }
+
     protected function admin(Request $r): void { abort_unless($r->user()?->is_admin, 403, 'Only admins can add numbers.'); }
     protected function out(PhoneNumber $n) { return $n->fresh()->load('client:id,name,company,is_active'); }
 
@@ -61,7 +71,7 @@ class PhoneNumberOnboardingController extends Controller
         $this->admin($r);
         $d = $r->validate(['code_method' => 'required|in:SMS,VOICE', 'language' => ['nullable', 'string', 'regex:/^[a-z]{2,3}(_[A-Z]{2})?$/']]);
         try { $wa->requestCode($phoneNumber->phone_number_id, $d['code_method'], $d['language'] ?? 'en_US'); }
-        catch (Throwable $e) { $phoneNumber->update(['onboarding_error' => $e->getMessage()]); return $this->fail($e, 502, ['number' => $this->out($phoneNumber)]); }
+        catch (Throwable $e) { $phoneNumber->update(['onboarding_error' => $e->getMessage()]); return $this->fail($e, 502, ['number' => $this->out($phoneNumber), 'hint' => self::stillOnAppHint($e)]); }
         $phoneNumber->update(['code_method' => $d['code_method'], 'code_requested_at' => now(), 'onboarding_error' => null,
             'onboarding_step' => in_array($phoneNumber->onboarding_step, ['verified', 'registered'], true) ? $phoneNumber->onboarding_step : 'code_requested']);
         return ['message' => 'Verification code sent by '.($d['code_method'] === 'SMS' ? 'SMS' : 'voice call').'.', 'number' => $this->out($phoneNumber)];
