@@ -9,13 +9,14 @@ use App\Models\PhoneNumber;
 use App\Services\AiReplyService;
 use Illuminate\Http\Request;
 
-/** Per-number AI reply settings. Admin: all numbers; client portal: only its own. Provider key lives in admin Settings only. */
+/** Per-number AI reply settings. Admin only. Provider key lives in admin Settings only. */
 class AiReplyController extends Controller
 {
     protected function numbers(Request $r)
     {
         $u = $r->user();
-        return $u instanceof Client ? PhoneNumber::where('client_id', $u->id) : PhoneNumber::query();
+        abort_if($u instanceof Client, 404); // admin-only feature
+        return PhoneNumber::query();
     }
 
     public function index(Request $r)

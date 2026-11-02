@@ -6,7 +6,7 @@ import { Button, Card, Field, Badge, Toggle, useToast, useLoad, Empty, Skeleton 
 const pick = (s) => ({ enabled: !!s.enabled, test_mode: s.test_mode ?? true, allowlist: (s.allowlist || []).join('\n'), knowledge_base: s.knowledge_base || '',
   max_per_hour: s.max_per_hour ?? 5, handoff_cooldown_hours: s.handoff_cooldown_hours ?? 24 })
 
-/** Per-number AI chat replies. scope: 'admin' (all numbers) or 'client' (own numbers only). Default OFF, test mode ON. */
+/** Per-number AI chat replies (admin only). Default OFF, test mode ON. */
 export function AiReplies({ scope = 'admin' }) {
   const P = scope === 'client' ? '/client' : ''
   const [data, reload, loading] = useLoad(`${P}/ai-replies`)
@@ -61,16 +61,18 @@ function AiForm({ P, row, reload, model }) {
   </div>)
 }
 
+export const MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1-nano']
+
 /** Admin Settings → AI Replies (provider URL, model, encrypted API key, global limit). */
 export function AiProviderSettings() {
-  const toast = useToast(); const [s, setS] = useState(null); const [f, setF] = useState(null); const [busy, setBusy] = useState(false)
-  const apply = (r) => { setS(r); setF({ ai_base_url: r.ai_base_url || '', ai_model: r.ai_model || '', ai_api_key: '', ai_global_max_per_hour: r.ai_global_max_per_hour || '' }) }
+  const toast = useToast(); const [s, setS] = useState(null); const [f, setF] = useState(null); const [busy, setBusy] = useState(false); const [custom, setCustom] = useState(false)
+  const apply = (r) => { setS(r); setCustom(!!r.ai_model && !MODELS.includes(r.ai_model)); setF({ ai_base_url: r.ai_base_url || '', ai_model: r.ai_model || '', ai_api_key: '', ai_global_max_per_hour: r.ai_global_max_per_hour || '' }) }
   useEffect(() => { api('/settings').then(apply).catch((e) => toast.error(e.message)) }, []) // eslint-disable-line
   if (!f) return <Card title="AI Replies" icon={Sparkles}><Skeleton h={120} /></Card>
   const d = s.ai_defaults || {}
   const save = async (e) => {
     e.preventDefault(); setBusy(true)
-    try { apply(await api('/settings', { method: 'PUT', body: { ...f, ai_api_key: f.ai_api_key || null } })); toast.success('AI settings saved (key encrypted)') }
+    try { apply(await api('/settings', { method: 'PUT', body: { ...f, ai_model: f.ai_model || MODELS[0], ai_api_key: f.ai_api_key || null } })); toast.success('AI settings saved (key encrypted)') }
     catch (err) { toast.error(err.message) } finally { setBusy(false) }
   }
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
@@ -79,9 +81,12 @@ export function AiProviderSettings() {
       <p className="muted small">OpenAI-compatible chat completions provider used for AI chat replies. Turn AI on per number in Auto-replies.</p>
       <div className="form-2">
         <Field label="Base URL" icon={Link2} hint={`Default ${d.base_url}`}><input value={f.ai_base_url} onChange={set('ai_base_url')} placeholder={d.base_url} /></Field>
-        <Field label="Model" icon={Cpu} hint={`Default ${d.model}`}><input value={f.ai_model} onChange={set('ai_model')} placeholder={d.model} /></Field>
+        <Field label="Model" icon={Cpu} hint={`Default ${d.model}`}>
+          <select value={custom ? '__custom' : (f.ai_model || MODELS[0])} onChange={(e) => { const v = e.target.value; setCustom(v === '__custom'); setF({ ...f, ai_model: v === '__custom' ? '' : v }) }}>
+            {MODELS.map((m) => <option key={m} value={m}>{m}{m === MODELS[0] ? ' (default)' : ''}</option>)}<option value="__custom">Custom…</option></select>
+          {custom && <input style={{ marginTop: 6 }} value={f.ai_model} onChange={set('ai_model')} placeholder="model name, e.g. gpt-4.1" />}</Field>
       </div>
-      <Field label="API key" icon={KeyRound} hint={s.ai_api_key_set ? `Saved: ${s.ai_api_key} — leave blank to keep` : 'e.g. an OpenAI key (sk-…); stored encrypted, never shown again'}>
+      <Field label="OpenAI API key" icon={KeyRound} hint={s.ai_api_key_set ? `Saved: ${s.ai_api_key} — leave blank to keep` : 'e.g. an OpenAI key (sk-…); stored encrypted, never shown again'}>
         <input type="password" autoComplete="new-password" value={f.ai_api_key} onChange={set('ai_api_key')} /></Field>
       <Field label="Global max AI replies / hour" icon={Gauge} hint={`All numbers combined. Default ${d.global_max_per_hour}`}><input type="number" min={1} value={f.ai_global_max_per_hour} onChange={set('ai_global_max_per_hour')} placeholder={String(d.global_max_per_hour)} /></Field>
       <div><Button type="submit" variant="primary" icon={Check} loading={busy}>Save AI settings</Button></div>

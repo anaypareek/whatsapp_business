@@ -78,9 +78,6 @@ Route::middleware(['auth:sanctum', EnsureClient::class])->prefix('client')->grou
     Route::get('/flow-numbers', [Api\FlowController::class, 'numberOptions']);
     Route::post('/flows-simulate', [Api\FlowController::class, 'simulate'])->middleware('throttle:120,1');
     Route::get('/greetings', [Api\GreetingController::class, 'index']);
-    Route::get('/ai-replies', [Api\AiReplyController::class, 'index']);
-    Route::put('/ai-replies/{phoneNumber}', [Api\AiReplyController::class, 'update'])->whereNumber('phoneNumber');
-    Route::post('/ai-replies/{phoneNumber}/resolve', [Api\AiReplyController::class, 'resolve'])->whereNumber('phoneNumber');
     Route::put('/greetings/{phoneNumber}', [Api\GreetingController::class, 'update'])->whereNumber('phoneNumber');
     Route::get('/greetings/{phoneNumber}/contacts', [Api\GreetingController::class, 'contacts'])->whereNumber('phoneNumber');
     Route::get('/greetings/{phoneNumber}/templates', [Api\GreetingController::class, 'templates'])->whereNumber('phoneNumber');

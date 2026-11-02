@@ -213,14 +213,16 @@ class AiReplyTest extends TestCase
         $this->assertStringNotContainsString('SECRET1234', (string) @file_get_contents(storage_path('logs/laravel.log')));
     }
 
-    public function test_client_portal_scoped_settings(): void
+    public function test_ai_settings_are_admin_only(): void
     {
-        $other = PhoneNumber::create(['phone_number_id' => '7009', 'display_number' => '+91 1']);
         $this->app['auth']->forgetGuards();
         $tok = $this->c->createToken('c')->plainTextToken;
-        $this->withToken($tok)->getJson('/api/client/ai-replies')->assertOk()->assertJsonCount(1, 'numbers');
-        $this->withToken($tok)->putJson("/api/client/ai-replies/{$other->id}", ['enabled' => true])->assertNotFound();
-        $this->withToken($tok)->putJson("/api/client/ai-replies/{$this->n->id}", ['enabled' => true, 'allowlist' => ['+91 98110 00001'], 'knowledge_base' => 'kb'])
+        $this->withToken($tok)->getJson('/api/client/ai-replies')->assertNotFound();
+        $this->withToken($tok)->putJson("/api/client/ai-replies/{$this->n->id}", ['enabled' => true])->assertNotFound();
+        $this->withToken($tok)->postJson("/api/client/ai-replies/{$this->n->id}/resolve", ['contact' => self::FROM])->assertNotFound();
+        $this->assertSame(0, AiReplySetting::count());
+        $this->withToken($tok)->getJson('/api/client/conversations')->assertOk(); // needs_human badge data still harmless
+        $this->admin()->putJson("/api/ai-replies/{$this->n->id}", ['enabled' => true, 'allowlist' => ['+91 98110 00001']])
             ->assertSuccessful()->assertJsonPath('allowlist.0', '919811000001')->assertJsonPath('test_mode', true);
     }
 }
