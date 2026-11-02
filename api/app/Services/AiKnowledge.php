@@ -98,10 +98,16 @@ class AiKnowledge
     public static function ingest(PhoneNumber $p, UploadedFile $f): AiKnowledgeFile
     {
         [$kind, $text] = self::extract($f);
+        return self::ingestText($p, $f->getClientOriginalName(), $text, $kind);
+    }
+
+    /** Store text as a knowledge "file" (also used for trainer notes, kind 'note'). */
+    public static function ingestText(PhoneNumber $p, string $name, string $text, string $kind = 'note'): AiKnowledgeFile
+    {
         $chunks = self::chunk($text);
         if (! $chunks) throw new RuntimeException('No text could be extracted from this file.');
-        return DB::transaction(function () use ($p, $f, $kind, $chunks) {
-            $file = AiKnowledgeFile::create(['phone_number_id' => $p->id, 'filename' => mb_substr($f->getClientOriginalName(), 0, 255), 'kind' => $kind,
+        return DB::transaction(function () use ($p, $name, $kind, $chunks) {
+            $file = AiKnowledgeFile::create(['phone_number_id' => $p->id, 'filename' => mb_substr($name, 0, 255), 'kind' => $kind,
                 'chunks' => count($chunks), 'chars' => array_sum(array_map('mb_strlen', $chunks))]);
             foreach ($chunks as $c) AiKnowledgeChunk::create(['phone_number_id' => $p->id, 'ai_knowledge_file_id' => $file->id, 'content' => $c]);
             return $file;

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { GraduationCap, Send, Pencil, Trash2, Upload, Image as ImageIcon, FileText, BookOpen, Check, X, UserRound, Package } from 'lucide-react'
+import { GraduationCap, Paperclip, HelpCircle, ChevronRight, Sparkles, Send, Pencil, Trash2, Upload, Image as ImageIcon, FileText, BookOpen, Check, X, UserRound, Package } from 'lucide-react'
 import { api } from './api'
 import { Button, Card, Field, Badge, PageHeader, useToast, useLoad, Empty, Skeleton } from './ui'
 
@@ -9,11 +9,12 @@ export function TrainAi() {
   const [sel, setSel] = useState(null)
   useEffect(() => { if (!sel && nums.length) setSel(nums[0].id) }, [nums.length]) // eslint-disable-line
   return (<div className="page">
-    <PageHeader icon={GraduationCap} title="Train AI" subtitle="Test the AI, correct its answers, and add documents and product photos — per WhatsApp number" />
+    <PageHeader icon={GraduationCap} title="Train AI" subtitle="Just chat: tell the AI your prices, policies and answers, or drop in files and product photos. It saves what it learns." />
     <div className="row" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
       {nums.map((n) => <Button key={n.id} size="sm" variant={n.id === sel ? 'primary' : 'secondary'} onClick={() => setSel(n.id)}>{n.name || n.display_number}</Button>)}
     </div>
-    {sel ? <Trainer key={sel} id={sel} /> : <Card><Empty icon={GraduationCap} title="No numbers">Add a WhatsApp number first.</Empty></Card>}
+    {sel ? <div key={sel}><TrainerChat id={sel} />
+      <details className="advanced"><summary><ChevronRight size={14} /> Advanced — playground, rules, files and images</summary><Trainer id={sel} /></details></div> : <Card><Empty icon={GraduationCap} title="No numbers">Add a WhatsApp number first.</Empty></Card>}
   </div>)
 }
 
@@ -117,5 +118,48 @@ function Images({ id, rows, reload }) {
     </form>
     {rows.length > 0 && <div className="img-grid">{rows.map((x) => <div key={x.id} className="img-tile"><img src={x.url} alt={x.name} /><div className="small"><b>{x.name}</b><div className="muted">{x.tags}</div></div>
       <Button size="sm" icon={Trash2} onClick={() => del(x)} /></div>)}</div>}
+  </Card>)
+}
+
+/** The main, simple trainer chat. History is stored on the server per number. */
+function TrainerChat({ id }) {
+  const toast = useToast()
+  const [d, reload, loading] = useLoad(`/ai-train/${id}/trainer`)
+  const [local, setLocal] = useState([]) // optimistic messages not yet in d
+  const [text, setText] = useState(''); const [files, setFiles] = useState([]); const [busy, setBusy] = useState(false)
+  const box = useRef(); const fileRef = useRef()
+  const msgs = [...(d.messages || []), ...local]
+  useEffect(() => { if (box.current) box.current.scrollTop = box.current.scrollHeight }, [msgs.length, busy])
+  const send = async (e) => {
+    e?.preventDefault(); if (busy || (!text.trim() && !files.length)) return
+    const form = new FormData(); form.append('message', text.trim()); files.forEach((f) => form.append('files[]', f))
+    setLocal([{ id: 'tmp', role: 'user', content: text.trim() || `(attached ${files.length} file(s))`, attachments: files.map((f) => ({ type: f.type.startsWith('image/') ? 'image' : 'file', filename: f.name })) }])
+    setText(''); setFiles([]); setBusy(true)
+    try { await api(`/ai-train/${id}/trainer`, { method: 'POST', form }) } catch (err) { toast.error(err.message) }
+    finally { await reload(); setLocal([]); setBusy(false) }
+  }
+  const clear = async () => { if (!confirm('Clear this training chat? Saved rules, files and images stay.')) return; await api(`/ai-train/${id}/trainer`, { method: 'DELETE' }); reload() }
+  const dismiss = async (q) => { await api(`/ai-train/${id}/questions/${q.id}`, { method: 'DELETE' }); reload() }
+  const open = d.open_questions || []
+  return (<Card title="Teach your AI" icon={Sparkles} actions={msgs.length > 0 && <Button size="sm" onClick={clear}>Clear chat</Button>}>
+    <div className="train-chat big" ref={box}>
+      {loading && !d.messages && <Skeleton h={120} />}
+      {!msgs.length && !loading && <div className="msg in"><div className="bubble"><div className="text">Hi Vibhav 👋 Tell me anything customers should know — prices, delivery areas, timings, return policy — or attach a price list (PDF/CSV/TXT) or product photos. I'll ask if something is unclear and save it for the customer AI.</div></div></div>}
+      {d.greeting && <div className="msg in"><div className="bubble"><div className="text">{d.greeting}</div>
+        <div className="q-chips">{open.map((q) => <span key={q.id} className="q-chip"><HelpCircle size={12} /><button className="link" onClick={() => setText(`Answer for "${q.question}": `)}>{q.question}</button><button className="link muted" title="Dismiss" onClick={() => dismiss(q)}><X size={12} /></button></span>)}</div></div></div>}
+      {msgs.map((m) => <div key={m.id} className={`msg ${m.role === 'user' ? 'out' : 'in'}`}><div className="bubble">
+        {(m.attachments || []).map((a, i) => a.type === 'image' && a.url ? <img key={i} src={a.url} alt={a.filename} style={{ maxWidth: 160, borderRadius: 6, display: 'block' }} /> : <div key={i} className="small muted"><FileText size={12} /> {a.filename}</div>)}
+        <div className="text">{m.content}</div>
+        {m.saved?.length > 0 && <div className="saved-note"><Check size={12} /> Saved: {m.saved.join(' · ')}</div>}
+      </div></div>)}
+      {busy && <div className="msg in"><div className="bubble"><div className="text muted">Thinking…</div></div></div>}
+    </div>
+    {files.length > 0 && <div className="row small" style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>{files.map((f, i) => <Badge key={i}>{f.name} <button className="link" onClick={() => setFiles(files.filter((_, j) => j !== i))}><X size={10} /></button></Badge>)}</div>}
+    <form className="row composer" style={{ gap: 8, marginTop: 10 }} onSubmit={send}>
+      <Button type="button" icon={Paperclip} title="Attach PDF, TXT, CSV or image" onClick={() => fileRef.current?.click()} />
+      <input ref={fileRef} type="file" hidden multiple accept=".pdf,.txt,.csv,image/jpeg,image/png" onChange={(e) => { setFiles([...files, ...e.target.files].slice(0, 5)); e.target.value = '' }} />
+      <textarea className="grow" rows={1} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) send(e) }} placeholder="e.g. Toor dal is ₹145/kg, free delivery above ₹500…" />
+      <Button type="submit" variant="primary" icon={Send} loading={busy}>Send</Button>
+    </form>
   </Card>)
 }

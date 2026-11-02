@@ -141,6 +141,10 @@ Route::middleware(['auth:sanctum', EnsureStaff::class])->group(function () {
     Route::put('/ai-replies/{phoneNumber}', [Api\AiReplyController::class, 'update'])->whereNumber('phoneNumber');
     Route::post('/ai-replies/{phoneNumber}/resolve', [Api\AiReplyController::class, 'resolve'])->whereNumber('phoneNumber');
     Route::get('/ai-train/{phoneNumber}', [Api\AiTrainController::class, 'show'])->whereNumber('phoneNumber');
+    Route::get('/ai-train/{phoneNumber}/trainer', [Api\AiTrainController::class, 'trainer'])->whereNumber('phoneNumber');
+    Route::post('/ai-train/{phoneNumber}/trainer', [Api\AiTrainController::class, 'trainerSend'])->whereNumber('phoneNumber')->middleware('throttle:30,1');
+    Route::delete('/ai-train/{phoneNumber}/trainer', [Api\AiTrainController::class, 'trainerClear'])->whereNumber('phoneNumber');
+    Route::delete('/ai-train/{phoneNumber}/questions/{id}', [Api\AiTrainController::class, 'dismissQuestion'])->whereNumber('phoneNumber')->whereNumber('id');
     Route::post('/ai-train/{phoneNumber}/chat', [Api\AiTrainController::class, 'chat'])->whereNumber('phoneNumber')->middleware('throttle:30,1');
     Route::post('/ai-train/{phoneNumber}/examples', [Api\AiTrainController::class, 'storeExample'])->whereNumber('phoneNumber');
     Route::put('/ai-train/{phoneNumber}/examples/{id}', [Api\AiTrainController::class, 'updateExample'])->whereNumber('phoneNumber')->whereNumber('id');

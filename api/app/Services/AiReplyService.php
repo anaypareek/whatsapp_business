@@ -139,7 +139,10 @@ class AiReplyService
             $this->messaging->send($phone, $in->contact_wa_id, OrderLookup::format($orders), source: 'ai');
             return 'order';
         }
-        if ($r['handoff']) return $this->handoff($phone, $in, (string) $in->body);
+        if ($r['handoff']) {
+            \App\Models\AiOpenQuestion::record($phone->id, $in->contact_wa_id, (string) $in->body); // teachable in Train AI
+            return $this->handoff($phone, $in, (string) $in->body);
+        }
         if ($r['image']) {
             $this->messaging->send($phone, $in->contact_wa_id, mb_substr($r['text'], 0, 1000) ?: $r['image']->name, mediaUrl: $r['image']->url, source: 'ai');
             return 'image';

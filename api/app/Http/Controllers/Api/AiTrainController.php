@@ -10,6 +10,9 @@ use App\Models\Client;
 use App\Models\PhoneNumber;
 use App\Services\AiKnowledge;
 use App\Services\AiReplyService;
+use App\Services\AiTrainer;
+use App\Models\AiOpenQuestion;
+use App\Models\AiTrainerMessage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
@@ -46,6 +49,44 @@ class AiTrainController extends Controller
         $p = AiReplyService::parse($n, $text);
         return ['raw' => $text, 'reply' => $p['handoff'] ? AiReplyService::HANDOFF_TEXT : $p['text'], 'handoff' => $p['handoff'],
             'order_lookup' => $p['order'], 'image' => $p['image']];
+    }
+
+    /** Trainer chat: history (last 50), open questions, deterministic opener. */
+    public function trainer(Request $r, int $phoneNumber)
+    {
+        $n = $this->num($r, $phoneNumber);
+        return [
+            'messages' => AiTrainerMessage::where('phone_number_id', $n->id)->latest('id')->limit(50)->get()->reverse()->values()
+                ->map(fn ($m) => $m->only(['id', 'role', 'content', 'saved', 'created_at']) + ['attachments' => collect($m->attachments)->map(fn ($a) => array_intersect_key($a, array_flip(['ref', 'type', 'filename', 'saved'])) + (isset($a['path']) ? ['url' => rtrim(config('app.url'), '/').'/storage/'.$a['path']] : []))->all()]),
+            'open_questions' => AiOpenQuestion::where('phone_number_id', $n->id)->where('status', 'open')->latest('id')->limit(20)->get(['id', 'question', 'created_at']),
+            'greeting' => AiTrainer::greeting($n),
+        ];
+    }
+
+    public function trainerSend(Request $r, int $phoneNumber, AiTrainer $t)
+    {
+        $n = $this->num($r, $phoneNumber);
+        $r->validate(['message' => 'nullable|string|max:4000', 'files' => 'nullable|array|max:5', 'files.*' => 'file|max:10240|extensions:pdf,txt,csv,jpg,jpeg,png']);
+        $text = trim((string) $r->input('message'));
+        $files = $r->file('files', []);
+        if ($text === '' && ! $files) return response()->json(['message' => 'Type something or attach a file.', 'errors' => ['message' => ['Required']]], 422);
+        if (! AiReplyService::config()['key']) return response()->json(['message' => 'Set the OpenAI API key in Settings → AI Replies first.'], 422);
+        [$user, $bot, $notes] = $t->turn($n, $text, $files);
+        if (! $bot) return response()->json(['message' => 'AI provider error or timeout. Your message was kept; try again.', 'user' => $user, 'saved' => $notes], 502);
+        return ['user' => $user, 'reply' => $bot, 'saved' => $notes, 'open_questions' => AiOpenQuestion::where('phone_number_id', $n->id)->where('status', 'open')->count()];
+    }
+
+    public function trainerClear(Request $r, int $phoneNumber)
+    {
+        AiTrainer::forget($this->num($r, $phoneNumber));
+        return ['ok' => true];
+    }
+
+    public function dismissQuestion(Request $r, int $phoneNumber, int $id)
+    {
+        $n = $this->num($r, $phoneNumber);
+        AiOpenQuestion::where('phone_number_id', $n->id)->findOrFail($id)->update(['status' => 'dismissed', 'resolved_at' => now()]);
+        return ['ok' => true];
     }
 
     public function storeExample(Request $r, int $phoneNumber)
