@@ -2,6 +2,8 @@
 namespace App\Services;
 
 use App\Models\AutoReplyRule;
+use App\Models\GreetingGroup;
+use App\Models\GreetingSetting;
 use App\Models\Message;
 use App\Models\MessageStatus;
 use App\Models\PhoneNumber;
@@ -15,7 +17,7 @@ class WebhookProcessor
 
     public function handle(array $payload): array
     {
-        $stats = ['messages' => 0, 'statuses' => 0, 'auto_replies' => 0, 'flows' => 0, 'template_events' => 0];
+        $stats = ['messages' => 0, 'statuses' => 0, 'auto_replies' => 0, 'flows' => 0, 'template_events' => 0, 'greetings' => 0];
         foreach ($payload['entry'] ?? [] as $entry) {
             foreach ($entry['changes'] ?? [] as $change) {
                 $field = $change['field'] ?? null;
@@ -56,9 +58,11 @@ class WebhookProcessor
                     ]);
                     $stats['messages']++;
                     if ($phone) \App\Jobs\SendIncomingMessagePush::dispatchAfterResponse($msg->id); // client phones + Master app
-                    // automation flows take priority over simple auto-replies
-                    if ($phone && $this->flows->handle($phone, $msg)) $stats['flows']++;
-                    elseif ($phone && $body && $this->autoReply($phone, $msg)) $stats['auto_replies']++;
+                    // one auto-reply per inbound: keyword rules, then flows/sessions, then greeting / off-hours
+                    if (! $phone) continue;
+                    if ($body && $this->autoReply($phone, $msg)) $stats['auto_replies']++;
+                    elseif ($this->flows->handle($phone, $msg)) $stats['flows']++;
+                    elseif ($this->greeting($phone, $msg)) $stats['greetings']++;
                 }
                 foreach ($v['statuses'] ?? [] as $s) {
                     $orig = Message::where('wamid', $s['id'])->first();
@@ -115,6 +119,29 @@ class WebhookProcessor
             if ($t && $event) $t->update(['previous_category' => $v['previous_category'] ?? $t->category, 'category' => $event]);
         }
         TemplateEvent::create(['message_template_id' => $t?->id, 'field' => $field, 'event' => $event, 'reason' => $reason, 'raw' => $v]);
+    }
+
+    /** Greeting / off-hours auto-reply (off unless enabled per number). Returns true if one was sent. */
+    public function greeting(PhoneNumber $phone, Message $in): bool
+    {
+        $g = GreetingSetting::where('phone_number_id', $phone->id)->first();
+        if (! $g || ! $g->enabled) return false;
+        $off = $g->isOffHours();
+        $grp = GreetingGroup::forContact($phone->id, $in->contact_wa_id);
+        // group text wins when set; otherwise fall back to the number's default text
+        $text = trim((string) ($off ? ($grp?->off_hours_text ?: $g->off_hours_text) : ($grp?->greeting_text ?: $g->greeting_text)));
+        if ($text === '') return false;
+        $contact = $in->contact_wa_id;
+        $conv = Message::where('phone_number_id', $phone->id)->where('contact_wa_id', $contact);
+        if ($g->mode === 'new_only' && (clone $conv)->where('direction', 'in')->where('id', '!=', $in->id)->exists()) return false;
+        $since = now()->subHours(max(1, (int) $g->cooldown_hours));
+        // cooldown: at most one greeting/off-hours message per customer per window
+        if ((clone $conv)->where('direction', 'out')->whereIn('source', ['greeting', 'off_hours'])->where('created_at', '>=', $since)->exists()) return false;
+        // a person (admin/staff) already replied manually in the window
+        if ((clone $conv)->where('direction', 'out')->where('is_auto', false)->whereNotIn('source', MessagingService::AUTO_SOURCES)->where('created_at', '>=', $since)->exists()) return false;
+        $text = str_replace('{name}', trim((string) $in->contact_name), $text);
+        $this->messaging->send($phone, $contact, $text, mediaUrl: (! $off && $g->image_url) ? $g->image_url : null, source: $off ? 'off_hours' : 'greeting');
+        return true;
     }
 
     protected function autoReply(PhoneNumber $phone, Message $in): bool

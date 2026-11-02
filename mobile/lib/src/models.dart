@@ -14,6 +14,8 @@ class WaNumber {
   String get label => clientName == null || clientName!.isEmpty ? _base : '$_base · $clientName';
 }
 
+const unsupportedNote = "This message type isn't supported by WhatsApp Business API (e.g. view-once, poll, edited message). Ask the sender to resend as text, photo or document.";
+
 class Msg {
   final int id; // negative = local optimistic message
   final int phoneNumberId; final String contact; final String? contactName;
@@ -21,20 +23,22 @@ class Msg {
   final String? templateName; final String? mediaId; final String? mediaUrl; final String? filename; final String? mimeType;
   final String status; final String? error; final DateTime createdAt; final DateTime? readAt;
   final String? localPath; // for optimistic attachments
+  final bool isAuto; // sent by automation (keyword reply, flow, greeting)
   Msg({required this.id, required this.phoneNumberId, required this.contact, this.contactName, required this.direction, required this.type,
       this.body, this.templateName, this.mediaId, this.mediaUrl, this.filename, this.mimeType, required this.status, this.error,
-      required this.createdAt, this.readAt, this.localPath});
+      required this.createdAt, this.readAt, this.localPath, this.isAuto = false});
 
   factory Msg.fromJson(Map<String, dynamic> j) => Msg(
         id: _int(j['id']), phoneNumberId: _int(j['phone_number_id']), contact: '${j['contact_wa_id'] ?? ''}',
         contactName: j['contact_name'] as String?, direction: '${j['direction'] ?? 'out'}', type: '${j['type'] ?? 'text'}',
         body: j['body'] as String?, templateName: j['template_name'] as String?, mediaId: j['media_id']?.toString(),
         mediaUrl: j['media_url'] as String?, filename: j['filename'] as String?, mimeType: j['mime_type'] as String?,
-        status: '${j['status'] ?? ''}', error: j['error']?.toString(), createdAt: _dt(j['created_at']) ?? DateTime.now(), readAt: _dt(j['read_at']));
+        status: '${j['status'] ?? ''}', error: j['error']?.toString(), createdAt: _dt(j['created_at']) ?? DateTime.now(), readAt: _dt(j['read_at']),
+        isAuto: j['is_auto'] == true || j['is_auto'] == 1 || const {'auto_reply', 'flow', 'greeting', 'off_hours'}.contains(j['source']));
 
   Msg copyWith({String? status, String? error}) => Msg(id: id, phoneNumberId: phoneNumberId, contact: contact, contactName: contactName,
       direction: direction, type: type, body: body, templateName: templateName, mediaId: mediaId, mediaUrl: mediaUrl, filename: filename,
-      mimeType: mimeType, status: status ?? this.status, error: error ?? this.error, createdAt: createdAt, readAt: readAt, localPath: localPath);
+      mimeType: mimeType, status: status ?? this.status, error: error ?? this.error, createdAt: createdAt, readAt: readAt, localPath: localPath, isAuto: isAuto);
 
   bool get incoming => direction == 'in';
   bool get hasMedia => const {'image', 'video', 'audio', 'document', 'sticker'}.contains(type) && (mediaId != null || mediaUrl != null || localPath != null);
@@ -51,6 +55,7 @@ class Msg {
       case 'sticker': return '💟 Sticker';
       case 'document': return '📄 ${filename ?? (t.isEmpty ? 'Document' : t)}';
       case 'location': return '📍 Location';
+      case 'unsupported': return t.isEmpty ? '⚠️ Unsupported message' : t;
       case 'template': return t.isEmpty ? '📋 ${templateName ?? 'Template'}' : t;
       default: return t.isEmpty ? type : t;
     }

@@ -18,7 +18,9 @@ class Bubble extends StatelessWidget {
     final out = !m.incoming;
     final maxW = MediaQuery.of(context).size.width * .78;
     final time = Text(DateFormat('h:mm a').format(m.createdAt), style: const TextStyle(fontSize: 11, color: Brand.muted));
-    final meta = Row(mainAxisSize: MainAxisSize.min, children: [time, if (out) ...[const SizedBox(width: 3), StatusTicks(m.status, size: 15)]]);
+    final meta = Row(mainAxisSize: MainAxisSize.min, children: [
+      if (m.isAuto) ...[const Icon(Icons.smart_toy_outlined, size: 12, color: Brand.muted), const Text(' auto', style: TextStyle(fontSize: 11, color: Brand.muted, fontStyle: FontStyle.italic)), const SizedBox(width: 6)],
+      time, if (out) ...[const SizedBox(width: 3), StatusTicks(m.status, size: 15)]]);
     final text = (m.body ?? '').trim();
     final showText = text.isNotEmpty && !(m.type == 'document' && text == m.filename);
 
@@ -41,7 +43,7 @@ class Bubble extends StatelessWidget {
           if (!m.hasMedia && const {'image', 'video', 'audio', 'document', 'sticker'}.contains(m.type))
             Padding(padding: const EdgeInsets.fromLTRB(10, 8, 10, 0), child: Text(m.preview, style: const TextStyle(color: Brand.muted))),
           if (const {'location', 'contacts', 'interactive', 'button', 'reaction', 'unsupported'}.contains(m.type) && !showText)
-            Padding(padding: const EdgeInsets.fromLTRB(10, 8, 10, 0), child: Text(m.preview, style: const TextStyle(color: Brand.muted, fontStyle: FontStyle.italic))),
+            Padding(padding: const EdgeInsets.fromLTRB(10, 8, 10, 0), child: Text(m.type == 'unsupported' ? unsupportedNote : m.preview, style: const TextStyle(color: Brand.muted, fontStyle: FontStyle.italic))),
           Padding(
             padding: const EdgeInsets.fromLTRB(10, 6, 8, 5),
             child: Wrap(alignment: WrapAlignment.end, crossAxisAlignment: WrapCrossAlignment.end, spacing: 8, children: [

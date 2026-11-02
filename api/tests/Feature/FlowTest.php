@@ -108,14 +108,13 @@ class FlowTest extends TestCase
     public function test_keyword_trigger_sends_message_and_interactive_buttons(): void
     {
         $f = $this->makeFlow();
-        AutoReplyRule::create(['match_type' => 'contains', 'trigger' => 'hi', 'reply' => 'old auto reply', 'enabled' => true]);
-        $this->text('machine wash?');   // "hi" inside a word does not trigger the flow; no auto-reply match either ("hi" contains rule would!)
+        $this->text('machine wash?');   // "hi" inside a word does not trigger the flow
         $this->assertSame(0, $f->fresh()->triggered_count);
         Http::fake(['graph.facebook.com/*/messages' => fn () => Http::response(['messages' => [['id' => 'wamid.X'.bin2hex(random_bytes(4))]]])]);
 
         $this->text('HI there');
         $s = $this->sent();
-        $this->assertCount(2, $s, 'flow replies only; the old auto-reply is skipped');
+        $this->assertCount(2, $s, 'flow replies only');
         $this->assertSame('image', $s[0]['type']);
         $this->assertSame('https://cdn.example.com/banner.jpg', $s[0]['image']['link']);
         $this->assertSame('Welcome to Oswal Soap!', $s[0]['image']['caption']);
@@ -133,7 +132,8 @@ class FlowTest extends TestCase
         $this->assertDatabaseHas('flow_sessions', ['flow_id' => $f->id, 'contact_wa_id' => '919811000001', 'status' => 'active', 'current_node_id' => 'q1']);
         $this->assertDatabaseHas('messages', ['type' => 'interactive', 'source' => 'flow', 'direction' => 'out']);
 
-        // inactive flows don't trigger; the old auto-reply works again
+        // inactive flows don't trigger; a keyword auto-reply answers (keyword rules run before flows)
+        AutoReplyRule::create(['match_type' => 'contains', 'trigger' => 'hi', 'reply' => 'old auto reply', 'enabled' => true]);
         $this->admin()->putJson("/api/flows/{$f->id}", ['is_active' => false])->assertOk();
         Http::fake(['graph.facebook.com/*/messages' => Http::response(['messages' => [['id' => 'wamid.AR']]])]);
         $this->text('hi', '919811000009');

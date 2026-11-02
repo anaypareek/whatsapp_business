@@ -10,6 +10,9 @@ use Throwable;
 /** Sends via WhatsAppService and persists outbound messages. */
 class MessagingService
 {
+    /** Sources that are sent by automation (stored with is_auto = true). */
+    public const AUTO_SOURCES = ['auto_reply', 'flow', 'greeting', 'off_hours'];
+
     public function __construct(protected WhatsAppService $wa) {}
 
     public static function mediaTypeFor(?string $mime): string
@@ -39,7 +42,7 @@ class MessagingService
             'phone_number_id' => $from->id, 'contact_wa_id' => $to, 'direction' => 'out', 'type' => 'template',
             'body' => TemplateBuilder::render($t, $bodyParams, $headerParam), 'template_name' => $t->name.' ('.$t->language.')', 'message_template_id' => $t->id,
             'media_url' => in_array($hf, ['IMAGE', 'DOCUMENT', 'VIDEO']) && preg_match('#^https?://#', (string) $headerParam) ? $headerParam : null,
-            'status' => 'pending', 'source' => $source,
+            'status' => 'pending', 'source' => $source, 'is_auto' => in_array($source, self::AUTO_SOURCES, true),
         ]);
         try {
             $this->lastError = null;
@@ -59,7 +62,7 @@ class MessagingService
         $opts = collect($interactive['action']['buttons'] ?? [])->pluck('reply.title')
             ->merge(collect($interactive['action']['sections'] ?? [])->flatMap(fn ($sec) => collect($sec['rows'] ?? [])->pluck('title')));
         $msg = Message::create(['phone_number_id' => $from->id, 'contact_wa_id' => $to, 'direction' => 'out', 'type' => 'interactive',
-            'body' => trim($text."\n".$opts->map(fn ($t, $i) => ($i + 1).'. '.$t)->implode("\n")), 'status' => 'pending', 'source' => $source]);
+            'body' => trim($text."\n".$opts->map(fn ($t, $i) => ($i + 1).'. '.$t)->implode("\n")), 'status' => 'pending', 'source' => $source, 'is_auto' => in_array($source, self::AUTO_SOURCES, true)]);
         try {
             $res = $this->wa->sendInteractive($from->phone_number_id, $to, $interactive);
             $msg->fill(['wamid' => $res['messages'][0]['id'] ?? null, 'status' => 'sent', 'raw' => $res]);
@@ -75,7 +78,7 @@ class MessagingService
         $to = preg_replace('/\D/', '', $to);
         $msg = Message::create([
             'phone_number_id' => $from->id, 'contact_wa_id' => $to, 'direction' => 'out',
-            'type' => 'text', 'body' => $text, 'status' => 'pending', 'source' => $source,
+            'type' => 'text', 'body' => $text, 'status' => 'pending', 'source' => $source, 'is_auto' => in_array($source, self::AUTO_SOURCES, true),
         ]);
         try {
             if ($file) {

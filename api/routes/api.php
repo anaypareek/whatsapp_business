@@ -77,6 +77,12 @@ Route::middleware(['auth:sanctum', EnsureClient::class])->prefix('client')->grou
     Route::post('/template-requests', [Api\ClientPortalController::class, 'storeTemplateRequest'])->middleware('throttle:20,1');
     Route::get('/flow-numbers', [Api\FlowController::class, 'numberOptions']);
     Route::post('/flows-simulate', [Api\FlowController::class, 'simulate'])->middleware('throttle:120,1');
+    Route::get('/greetings', [Api\GreetingController::class, 'index']);
+    Route::put('/greetings/{phoneNumber}', [Api\GreetingController::class, 'update'])->whereNumber('phoneNumber');
+    Route::get('/greetings/{phoneNumber}/contacts', [Api\GreetingController::class, 'contacts'])->whereNumber('phoneNumber');
+    Route::post('/greetings/{phoneNumber}/groups', [Api\GreetingController::class, 'storeGroup'])->whereNumber('phoneNumber');
+    Route::put('/greeting-groups/{group}', [Api\GreetingController::class, 'updateGroup'])->whereNumber('group');
+    Route::delete('/greeting-groups/{group}', [Api\GreetingController::class, 'destroyGroup'])->whereNumber('group');
     Route::get('/flows', [Api\FlowController::class, 'index']);
     Route::post('/flows', [Api\FlowController::class, 'store']);
     Route::get('/flows/{flow}', [Api\FlowController::class, 'show'])->whereNumber('flow');
@@ -129,6 +135,12 @@ Route::middleware(['auth:sanctum', EnsureStaff::class])->group(function () {
     Route::delete('/flows/{flow}', [Api\FlowController::class, 'destroy'])->whereNumber('flow');
     Route::post('/flows/{flow}/duplicate', [Api\FlowController::class, 'duplicate'])->whereNumber('flow');
     Route::get('/flows/{flow}/stats', [Api\FlowController::class, 'stats'])->whereNumber('flow');
+    Route::get('/greetings', [Api\GreetingController::class, 'index']);
+    Route::put('/greetings/{phoneNumber}', [Api\GreetingController::class, 'update'])->whereNumber('phoneNumber');
+    Route::get('/greetings/{phoneNumber}/contacts', [Api\GreetingController::class, 'contacts'])->whereNumber('phoneNumber');
+    Route::post('/greetings/{phoneNumber}/groups', [Api\GreetingController::class, 'storeGroup'])->whereNumber('phoneNumber');
+    Route::put('/greeting-groups/{group}', [Api\GreetingController::class, 'updateGroup'])->whereNumber('group');
+    Route::delete('/greeting-groups/{group}', [Api\GreetingController::class, 'destroyGroup'])->whereNumber('group');
     Route::apiResource('auto-replies', Api\AutoReplyRuleController::class)->except('show')->parameters(['auto-replies' => 'autoReply']);
 
     Route::put('/templates/{template}/client', [Api\TemplateController::class, 'assignClient']);

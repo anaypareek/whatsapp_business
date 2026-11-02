@@ -9,6 +9,7 @@ import { Button, Card, PageHeader, Field, TableSkeleton, Empty, Badge, Toggle, u
 import { TemplateSender } from './templates'
 import { ClientSelect } from './clients'
 import { AddNumberWizard, ONBOARD_STEPS } from './add-number'
+import { Greetings, UNSUPPORTED_NOTE } from './greetings'
 
 // ---------------- Users ----------------
 export function Users({ user }) {
@@ -211,7 +212,8 @@ function Bubble({ m }) {
     {m.template_name && <div className="tpl-tag"><FileText size={12} /> {m.template_name}</div>}
     {m.direction === 'in' && m.media_id && !m.media_url && <div className="muted small">[{m.type}{m.filename ? `: ${m.filename}` : ''}]</div>}
     {media}{m.body && <div className="text">{m.body}</div>}
-    <div className="meta">{m.source === 'auto_reply' && <span className="src"><Bot size={11} /> auto</span>}{m.source === 'api' && <span className="src">API</span>}
+    {m.type === 'unsupported' && !m.body && <div className="unsupported-note">{UNSUPPORTED_NOTE}</div>}
+    <div className="meta">{(m.is_auto || ['auto_reply', 'flow', 'greeting', 'off_hours'].includes(m.source)) && <span className="src" title={m.source}><Bot size={11} /> auto</span>}{m.source === 'api' && <span className="src">API</span>}
       {m.source === 'test' && <span className="src">test</span>}{fmtShort(m.created_at)}{m.direction === 'out' && <span className={`tick ${m.status}`} title={m.error || m.status}>{TICK[m.status]}</span>}</div>
     {m.status === 'failed' && m.error && <div className="msg-err"><AlertCircle size={12} /> {m.error}</div>}
   </div></div>)
@@ -297,6 +299,7 @@ export function AutoReplies() {
   const del = async (r) => { if (!confirm('Delete rule?')) return; try { await api(`/auto-replies/${r.id}`, { method: 'DELETE' }); toast.success('Rule deleted'); reload() } catch (e) { toast.error(e.message) } }
   return (<div className="page">
     <PageHeader icon={Bot} title="Auto-replies" subtitle="Reply automatically when an incoming message matches a rule" />
+    <Greetings scope="admin" />
     <div className="grid-form">
       <Card title={editId ? 'Edit rule' : 'New rule'} icon={editId ? Pencil : Plus}>
         <form className="form" onSubmit={save}>
