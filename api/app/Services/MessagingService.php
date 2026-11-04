@@ -11,7 +11,7 @@ use Throwable;
 class MessagingService
 {
     /** Sources that are sent by automation (stored with is_auto = true). */
-    public const AUTO_SOURCES = ['auto_reply', 'flow', 'greeting', 'off_hours', 'ai'];
+    public const AUTO_SOURCES = ['auto_reply', 'flow', 'greeting', 'off_hours', 'ai', 'button'];
 
     public function __construct(protected WhatsAppService $wa) {}
 

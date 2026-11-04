@@ -56,16 +56,11 @@ function ParamInput({ v, onChange, allowTokens = true }) {
   </div>)
 }
 
-/** One greeting slot: plain text OR an APPROVED template with variable mapping. */
-export function Slot({ label, hint, placeholder, rows = 3, text, onText, tid, params, onTpl, templates }) {
-  const [mode, setMode] = useState(tid ? 'template' : 'text')
+/** APPROVED template picker + variable mapping (shared by greetings and template button replies). */
+export function TplMap({ tid, params, onTpl, templates }) {
   const t = templates.find((x) => x.id === tid)
   const prob = slotProblem(t, params)
-  return (<div className="field slot">
-    <div className="row" style={{ justifyContent: 'space-between' }}><span className="field-label">{label}</span>
-      <div className="row" style={{ gap: 6 }}>{[['text', 'Plain text'], ['template', 'Approved template']].map(([k, l]) => <Button key={k} size="sm" variant={mode === k ? 'primary' : 'secondary'} onClick={() => { setMode(k); if (k === 'text') onTpl(null, null) }}>{l}</Button>)}</div></div>
-    {mode === 'text' ? <><textarea rows={rows} value={text} onChange={(e) => onText(e.target.value)} placeholder={placeholder} />{hint && <span className="field-hint">{hint}</span>}</>
-      : <div className="tpl-map">
+  return (<div className="tpl-map">
         <select value={tid || ''} onChange={(e) => { const n = templates.find((x) => x.id === Number(e.target.value)); onTpl(n?.id || null, fitParams(n, null)) }}>
           <option value="">{templates.length ? 'Choose an approved template…' : 'No approved templates for this number'}</option>
           {templates.map((x) => <option key={x.id} value={x.id}>{x.name} ({x.language}) · {x.category}{x.blocked ? ' — not usable' : ''}</option>)}</select>
@@ -77,7 +72,17 @@ export function Slot({ label, hint, placeholder, rows = 3, text, onText, tid, pa
           {!t.body_vars && !t.header_needs && <span className="muted small">This template has no variables.</span>}
           {prob && <div className="alert-warn small">{prob}</div>}
         </>}
-      </div>}
+      </div>)
+}
+
+/** One greeting slot: plain text OR an APPROVED template with variable mapping. */
+export function Slot({ label, hint, placeholder, rows = 3, text, onText, tid, params, onTpl, templates }) {
+  const [mode, setMode] = useState(tid ? 'template' : 'text')
+  return (<div className="field slot">
+    <div className="row" style={{ justifyContent: 'space-between' }}><span className="field-label">{label}</span>
+      <div className="row" style={{ gap: 6 }}>{[['text', 'Plain text'], ['template', 'Approved template']].map(([k, l]) => <Button key={k} size="sm" variant={mode === k ? 'primary' : 'secondary'} onClick={() => { setMode(k); if (k === 'text') onTpl(null, null) }}>{l}</Button>)}</div></div>
+    {mode === 'text' ? <><textarea rows={rows} value={text} onChange={(e) => onText(e.target.value)} placeholder={placeholder} />{hint && <span className="field-hint">{hint}</span>}</>
+      : <TplMap tid={tid} params={params} onTpl={onTpl} templates={templates} />}
   </div>)
 }
 

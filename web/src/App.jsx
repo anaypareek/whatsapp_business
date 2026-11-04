@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { LayoutDashboard, MessagesSquare, Send, FileText, Phone, Bot, Users as UsersIcon, KeyRound, Settings as SettingsIcon, LogOut, Menu, ChevronDown, Bell, MessageCircle, Briefcase, PhoneCall, ClipboardList, Workflow, Bug, Camera, Wallet, GraduationCap } from 'lucide-react'
+import { LayoutDashboard, MessagesSquare, Send, FileText, Phone, Bot, Users as UsersIcon, KeyRound, Settings as SettingsIcon, LogOut, Menu, ChevronDown, Bell, MessageCircle, Briefcase, PhoneCall, ClipboardList, Workflow, Bug, Camera, Wallet, GraduationCap, MousePointerClick } from 'lucide-react'
 import { api, getToken, setToken } from './api'
 import { Spinner } from './ui'
 import { NavLink } from './editor-tools'
@@ -15,15 +15,16 @@ import { Instagram } from './instagram'
 import { Users, Numbers, SendMessage, Chat, AutoReplies, Settings } from './pages'
 import { ApiKeysPage } from './apikeys'
 import { TrainAi } from './train-ai'
+import { ButtonReplies } from './button-replies'
 import { Dues, DueBadge } from './billing'
 
 const NAV = [
   { group: 'Overview', items: [['dashboard', 'Dashboard', LayoutDashboard]] },
-  { group: 'Messaging', items: [['chat', 'Chat Master', MessagesSquare], ['send', 'Send Message', Send], ['templates', 'Template Master', FileText], ['flows', 'Automation Flows', Workflow], ['instagram', 'Instagram', Camera], ['rules', 'Auto-replies', Bot], ['train-ai', 'Train AI', GraduationCap]] },
+  { group: 'Messaging', items: [['chat', 'Chat Master', MessagesSquare], ['send', 'Send Message', Send], ['templates', 'Template Master', FileText], ['flows', 'Automation Flows', Workflow], ['instagram', 'Instagram', Camera], ['rules', 'Auto-replies', Bot], ['button-replies', 'Button replies', MousePointerClick], ['train-ai', 'Train AI', GraduationCap]] },
   { group: 'Requests', items: [['number-requests', 'Number Requests', PhoneCall, true], ['template-requests', 'Template Requests', ClipboardList, true]] },
   { group: 'Setup', items: [['clients', 'Clients', Briefcase, true], ['dues', 'Client Dues', Wallet, true], ['numbers', 'Number Master', Phone], ['users', 'Users', UsersIcon, true], ['keys', 'API Keys', KeyRound, true], ['settings', 'Settings', SettingsIcon, true], ['error-logs', 'Error Logs', Bug, true]] },
 ]
-const PAGES = { dues: Dues, 'error-logs': ErrorLogs, flows: () => <Flows scope="admin" />, instagram: () => <Instagram scope="admin" />, 'number-requests': NumberRequests, 'template-requests': TemplateRequests, clients: Clients, dashboard: Dashboard, chat: Chat, send: SendMessage, templates: Templates, numbers: Numbers, rules: AutoReplies, 'train-ai': TrainAi, users: Users, keys: () => <ApiKeysPage scope="admin" />, settings: Settings }
+const PAGES = { dues: Dues, 'error-logs': ErrorLogs, flows: () => <Flows scope="admin" />, instagram: () => <Instagram scope="admin" />, 'number-requests': NumberRequests, 'template-requests': TemplateRequests, clients: Clients, dashboard: Dashboard, chat: Chat, send: SendMessage, templates: Templates, numbers: Numbers, rules: AutoReplies, 'button-replies': () => <ButtonReplies scope="admin" />, 'train-ai': TrainAi, users: Users, keys: () => <ApiKeysPage scope="admin" />, settings: Settings }
 const TITLES = Object.fromEntries(NAV.flatMap((g) => g.items.map(([k, l]) => [k, l])))
 
 export default function App() {

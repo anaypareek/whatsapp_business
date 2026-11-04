@@ -214,7 +214,7 @@ function Bubble({ m }) {
     {m.direction === 'in' && m.media_id && !m.media_url && <div className="muted small">[{m.type}{m.filename ? `: ${m.filename}` : ''}]</div>}
     {media}{m.body && <div className="text">{m.body}</div>}
     {m.type === 'unsupported' && !m.body && <div className="unsupported-note">{UNSUPPORTED_NOTE}</div>}
-    <div className="meta">{m.source === 'ai' ? <span className="src ai" title="AI reply"><Bot size={11} /> ai</span> : (m.is_auto || ['auto_reply', 'flow', 'greeting', 'off_hours'].includes(m.source)) && <span className="src" title={m.source}><Bot size={11} /> auto</span>}{m.source === 'api' && <span className="src">API</span>}
+    <div className="meta">{m.source === 'ai' ? <span className="src ai" title="AI reply"><Bot size={11} /> ai</span> : (m.is_auto || ['auto_reply', 'flow', 'greeting', 'off_hours', 'button'].includes(m.source)) && <span className="src" title={m.source}><Bot size={11} /> {m.source === 'button' ? 'auto · button' : 'auto'}</span>}{m.source === 'api' && <span className="src">API</span>}
       {m.source === 'test' && <span className="src">test</span>}{fmtShort(m.created_at)}{m.direction === 'out' && <span className={`tick ${m.status}`} title={m.error || m.status}>{TICK[m.status]}</span>}</div>
     {m.status === 'failed' && m.error && <div className="msg-err"><AlertCircle size={12} /> {m.error}</div>}
   </div></div>)
