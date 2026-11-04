@@ -4,34 +4,43 @@ import { api } from './api'
 import { Button, Card, Field, Badge, PageHeader, useToast, useLoad, Empty, Skeleton } from './ui'
 
 /** Admin-only "Train AI": playground, corrections (Q→A), knowledge files and product images — all per number. */
-export function TrainAi() {
-  const [nums] = useLoad('/phone-numbers')
+export function TrainAi({ scope = 'admin' }) {
+  const [nums] = useLoad(scope === 'client' ? '/client/numbers' : '/phone-numbers')
+  const [view, setView] = useState('teach')
   const [sel, setSel] = useState(null)
+  const base = `${scope === 'client' ? '/client' : ''}/ai-train/${sel}`
   useEffect(() => { if (!sel && nums.length) setSel(nums[0].id) }, [nums.length]) // eslint-disable-line
   return (<div className="page">
     <PageHeader icon={GraduationCap} title="Train AI" subtitle="Just chat: tell the AI your prices, policies and answers, or drop in files and product photos. It saves what it learns." />
     <div className="row" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
       {nums.map((n) => <Button key={n.id} size="sm" variant={n.id === sel ? 'primary' : 'secondary'} onClick={() => setSel(n.id)}>{n.name || n.display_number}</Button>)}
     </div>
-    {sel ? <div key={sel}><TrainerChat id={sel} />
-      <details className="advanced"><summary><ChevronRight size={14} /> Advanced — playground, rules, files and images</summary><Trainer id={sel} /></details></div> : <Card><Empty icon={GraduationCap} title="No numbers">Add a WhatsApp number first.</Empty></Card>}
+    {sel ? <div key={sel}>
+      <div className="tabs" style={{ marginBottom: 12 }}>
+        <button className={view === 'teach' ? 'on' : ''} onClick={() => setView('teach')}><Sparkles size={14} /> Teach</button>
+        <button className={view === 'questions' ? 'on' : ''} onClick={() => setView('questions')}><HelpCircle size={14} /> Unanswered questions <OpenCount base={base} /></button>
+      </div>
+      {view === 'teach' ? <><TrainerChat id={sel} base={base} />
+        <details className="advanced"><summary><ChevronRight size={14} /> Advanced — playground, rules, files and images</summary><Trainer id={sel} base={base} /></details></>
+        : <Unanswered base={base} />}
+    </div> : <Card><Empty icon={GraduationCap} title="No numbers">Add a WhatsApp number first.</Empty></Card>}
   </div>)
 }
 
-function Trainer({ id }) {
-  const [d, reload, loading] = useLoad(`/ai-train/${id}`)
+function Trainer({ id, base }) {
+  const [d, reload, loading] = useLoad(`${base}`)
   if (loading && !d.examples) return <Card><Skeleton h={200} /></Card>
   return (<div className="grid-form">
-    <Playground id={id} reload={reload} />
+    <Playground id={id} base={base} reload={reload} />
     <div className="stack-cards">
-      <Examples id={id} rows={d.examples || []} reload={reload} />
-      <Files id={id} rows={d.files || []} reload={reload} />
-      <Images id={id} rows={d.images || []} reload={reload} />
+      <Examples id={id} base={base} rows={d.examples || []} reload={reload} />
+      <Files id={id} base={base} rows={d.files || []} reload={reload} />
+      <Images id={id} base={base} rows={d.images || []} reload={reload} />
     </div>
   </div>)
 }
 
-function Playground({ id, reload }) {
+function Playground({ base, reload }) {
   const toast = useToast(); const [msgs, setMsgs] = useState([]); const [input, setInput] = useState(''); const [busy, setBusy] = useState(false)
   const [fix, setFix] = useState(null); const box = useRef()
   useEffect(() => { if (box.current) box.current.scrollTop = box.current.scrollHeight }, [msgs.length])
@@ -39,12 +48,12 @@ function Playground({ id, reload }) {
     e.preventDefault(); if (!input.trim()) return
     const next = [...msgs, { role: 'user', content: input.trim() }]; setMsgs(next); setInput(''); setBusy(true)
     try {
-      const r = await api(`/ai-train/${id}/chat`, { method: 'POST', body: { messages: next.map(({ role, content }) => ({ role, content })) } })
+      const r = await api(`${base}/chat`, { method: 'POST', body: { messages: next.map(({ role, content }) => ({ role, content })) } })
       setMsgs([...next, { role: 'assistant', content: r.reply || r.raw, handoff: r.handoff, image: r.image, order: r.order_lookup }])
     } catch (err) { toast.error(err.message); setMsgs(msgs) } finally { setBusy(false) }
   }
   const saveFix = async () => {
-    try { await api(`/ai-train/${id}/examples`, { method: 'POST', body: { question: fix.question, answer: fix.answer } }); toast.success('Correction saved — the AI will use it for similar questions'); setFix(null); reload() }
+    try { await api(`${base}/examples`, { method: 'POST', body: { question: fix.question, answer: fix.answer } }); toast.success('Correction saved — the AI will use it for similar questions'); setFix(null); reload() }
     catch (err) { toast.error(err.message) }
   }
   return (<Card title="Playground" icon={Send}>
@@ -70,10 +79,10 @@ function Playground({ id, reload }) {
   </Card>)
 }
 
-function Examples({ id, rows, reload }) {
+function Examples({ base, rows, reload }) {
   const toast = useToast(); const [f, setF] = useState({ question: '', answer: '' })
-  const add = async (e) => { e.preventDefault(); try { await api(`/ai-train/${id}/examples`, { method: 'POST', body: f }); setF({ question: '', answer: '' }); reload() } catch (err) { toast.error(err.message) } }
-  const del = async (x) => { if (!confirm('Delete this example?')) return; try { await api(`/ai-train/${id}/examples/${x.id}`, { method: 'DELETE' }); reload() } catch (err) { toast.error(err.message) } }
+  const add = async (e) => { e.preventDefault(); try { await api(`${base}/examples`, { method: 'POST', body: f }); setF({ question: '', answer: '' }); reload() } catch (err) { toast.error(err.message) } }
+  const del = async (x) => { if (!confirm('Delete this example?')) return; try { await api(`${base}/examples/${x.id}`, { method: 'DELETE' }); reload() } catch (err) { toast.error(err.message) } }
   return (<Card title={`Corrections & rules (${rows.length})`} icon={BookOpen}>
     <form className="form" onSubmit={add}>
       <Field label="When a customer asks"><input value={f.question} onChange={(e) => setF({ ...f, question: e.target.value })} placeholder="Do you deliver on Sunday?" /></Field>
@@ -85,14 +94,14 @@ function Examples({ id, rows, reload }) {
   </Card>)
 }
 
-function Files({ id, rows, reload }) {
+function Files({ base, rows, reload }) {
   const toast = useToast(); const [busy, setBusy] = useState(false)
   const up = async (e) => {
     const file = e.target.files?.[0]; e.target.value = ''; if (!file) return
     const form = new FormData(); form.append('file', file); setBusy(true)
-    try { const r = await api(`/ai-train/${id}/files`, { method: 'POST', form }); toast.success(`${r.filename}: ${r.chunks} chunks extracted`); reload() } catch (err) { toast.error(err.message) } finally { setBusy(false) }
+    try { const r = await api(`${base}/files`, { method: 'POST', form }); toast.success(`${r.filename}: ${r.chunks} chunks extracted`); reload() } catch (err) { toast.error(err.message) } finally { setBusy(false) }
   }
-  const del = async (x) => { if (!confirm(`Remove ${x.filename}?`)) return; try { await api(`/ai-train/${id}/files/${x.id}`, { method: 'DELETE' }); reload() } catch (err) { toast.error(err.message) } }
+  const del = async (x) => { if (!confirm(`Remove ${x.filename}?`)) return; try { await api(`${base}/files/${x.id}`, { method: 'DELETE' }); reload() } catch (err) { toast.error(err.message) } }
   return (<Card title="Knowledge files" icon={FileText}>
     <p className="muted small">PDF, TXT or CSV price lists (max 10 MB). Text is split into small chunks; only the few most relevant are sent with each question.</p>
     <label className="btn btn-secondary btn-sm"><Upload size={14} /> {busy ? 'Uploading…' : 'Upload file'}<input type="file" hidden accept=".pdf,.txt,.csv" onChange={up} disabled={busy} /></label>
@@ -101,13 +110,13 @@ function Files({ id, rows, reload }) {
   </Card>)
 }
 
-function Images({ id, rows, reload }) {
+function Images({ base, rows, reload }) {
   const toast = useToast(); const [f, setF] = useState({ name: '', tags: '', file: null }); const [busy, setBusy] = useState(false)
   const add = async (e) => {
     e.preventDefault(); const form = new FormData(); form.append('image', f.file); form.append('name', f.name); form.append('tags', f.tags); setBusy(true)
-    try { await api(`/ai-train/${id}/images`, { method: 'POST', form }); setF({ name: '', tags: '', file: null }); e.target.reset(); reload() } catch (err) { toast.error(err.message) } finally { setBusy(false) }
+    try { await api(`${base}/images`, { method: 'POST', form }); setF({ name: '', tags: '', file: null }); e.target.reset(); reload() } catch (err) { toast.error(err.message) } finally { setBusy(false) }
   }
-  const del = async (x) => { if (!confirm(`Delete ${x.name}?`)) return; try { await api(`/ai-train/${id}/images/${x.id}`, { method: 'DELETE' }); reload() } catch (err) { toast.error(err.message) } }
+  const del = async (x) => { if (!confirm(`Delete ${x.name}?`)) return; try { await api(`${base}/images/${x.id}`, { method: 'DELETE' }); reload() } catch (err) { toast.error(err.message) } }
   return (<Card title="Product images" icon={ImageIcon}>
     <p className="muted small">When a customer asks for a photo, the AI picks the matching image by name/tags and sends it (JPG/PNG, max 5 MB).</p>
     <form className="form" onSubmit={add}>
@@ -122,9 +131,9 @@ function Images({ id, rows, reload }) {
 }
 
 /** The main, simple trainer chat. History is stored on the server per number. */
-function TrainerChat({ id }) {
+function TrainerChat({ base }) {
   const toast = useToast()
-  const [d, reload, loading] = useLoad(`/ai-train/${id}/trainer`)
+  const [d, reload, loading] = useLoad(`${base}/trainer`)
   const [local, setLocal] = useState([]) // optimistic messages not yet in d
   const [text, setText] = useState(''); const [files, setFiles] = useState([]); const [busy, setBusy] = useState(false)
   const box = useRef(); const fileRef = useRef()
@@ -135,16 +144,16 @@ function TrainerChat({ id }) {
     const form = new FormData(); form.append('message', text.trim()); files.forEach((f) => form.append('files[]', f))
     setLocal([{ id: 'tmp', role: 'user', content: text.trim() || `(attached ${files.length} file(s))`, attachments: files.map((f) => ({ type: f.type.startsWith('image/') ? 'image' : 'file', filename: f.name })) }])
     setText(''); setFiles([]); setBusy(true)
-    try { await api(`/ai-train/${id}/trainer`, { method: 'POST', form }) } catch (err) { toast.error(err.message) }
+    try { await api(`${base}/trainer`, { method: 'POST', form }) } catch (err) { toast.error(err.message) }
     finally { await reload(); setLocal([]); setBusy(false) }
   }
-  const clear = async () => { if (!confirm('Clear this training chat? Saved rules, files and images stay.')) return; await api(`/ai-train/${id}/trainer`, { method: 'DELETE' }); reload() }
-  const dismiss = async (q) => { await api(`/ai-train/${id}/questions/${q.id}`, { method: 'DELETE' }); reload() }
+  const clear = async () => { if (!confirm('Clear this training chat? Saved rules, files and images stay.')) return; await api(`${base}/trainer`, { method: 'DELETE' }); reload() }
+  const dismiss = async (q) => { await api(`${base}/questions/${q.id}`, { method: 'DELETE' }); reload() }
   const open = d.open_questions || []
   return (<Card title="Teach your AI" icon={Sparkles} actions={msgs.length > 0 && <Button size="sm" onClick={clear}>Clear chat</Button>}>
     <div className="train-chat big" ref={box}>
       {loading && !d.messages && <Skeleton h={120} />}
-      {!msgs.length && !loading && <div className="msg in"><div className="bubble"><div className="text">Hi Vibhav 👋 Tell me anything customers should know — prices, delivery areas, timings, return policy — or attach a price list (PDF/CSV/TXT) or product photos. I'll ask if something is unclear and save it for the customer AI.</div></div></div>}
+      {!msgs.length && !loading && <div className="msg in"><div className="bubble"><div className="text">Hi 👋 Tell me anything customers should know — prices, delivery areas, timings, return policy — or attach a price list (PDF/CSV/TXT) or product photos. I'll ask if something is unclear and save it for the customer AI.</div></div></div>}
       {d.greeting && <div className="msg in"><div className="bubble"><div className="text">{d.greeting}</div>
         <div className="q-chips">{open.map((q) => <span key={q.id} className="q-chip"><HelpCircle size={12} /><button className="link" onClick={() => setText(`Answer for "${q.question}": `)}>{q.question}</button><button className="link muted" title="Dismiss" onClick={() => dismiss(q)}><X size={12} /></button></span>)}</div></div></div>}
       {msgs.map((m) => <div key={m.id} className={`msg ${m.role === 'user' ? 'out' : 'in'}`}><div className="bubble">
@@ -161,5 +170,38 @@ function TrainerChat({ id }) {
       <textarea className="grow" rows={1} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) send(e) }} placeholder="e.g. Toor dal is ₹145/kg, free delivery above ₹500…" />
       <Button type="submit" variant="primary" icon={Send} loading={busy}>Send</Button>
     </form>
+  </Card>)
+}
+
+function OpenCount({ base }) {
+  const [d] = useLoad(`${base}/questions`)
+  const n = d.open?.length || 0
+  return n ? <span className="count-pill">{n}</span> : null
+}
+
+/** Customer questions the AI handed off. Answering saves a rule for THIS number and resolves the question. */
+function Unanswered({ base }) {
+  const toast = useToast(); const [d, reload, loading] = useLoad(`${base}/questions`); const [ans, setAns] = useState({}); const [busy, setBusy] = useState(null)
+  const answer = async (q) => {
+    setBusy(q.id)
+    try { await api(`${base}/questions/${q.id}/answer`, { method: 'POST', body: { answer: ans[q.id] } }); toast.success('Saved as a rule — the AI will answer this from now on'); reload() }
+    catch (err) { toast.error(err.message) } finally { setBusy(null) }
+  }
+  const dismiss = async (q) => { if (!confirm('Dismiss this question without an answer?')) return; await api(`${base}/questions/${q.id}`, { method: 'DELETE' }); reload() }
+  const open = d.open || []; const done = d.resolved || []
+  const when = (t) => t ? new Date(t).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : ''
+  return (<Card title={`Unanswered questions (${open.length})`} icon={HelpCircle}>
+    <p className="muted small">Customers asked these and the AI handed them to a human. Type the answer once; it is saved as a rule for this number only.</p>
+    {loading && !d.open && <Skeleton h={80} />}
+    {!loading && !open.length && <Empty icon={Check} title="All caught up">No unanswered questions for this number.</Empty>}
+    <div className="uq-list">{open.map((q) => <div key={q.id} className="uq">
+      <div className="uq-head"><b>“{q.question}”</b><span className="muted small"><UserRound size={12} /> {q.contact_name || 'Customer'}{q.contact_wa_id ? ` · +${q.contact_wa_id}` : ''} · {when(q.created_at)}</span></div>
+      <div className="row" style={{ gap: 8 }}>
+        <textarea className="grow" rows={2} value={ans[q.id] || ''} onChange={(e) => setAns({ ...ans, [q.id]: e.target.value })} placeholder="Type the answer customers should get…" />
+        <div className="stack" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}><Button size="sm" variant="primary" icon={Check} loading={busy === q.id} disabled={!ans[q.id]?.trim()} onClick={() => answer(q)}>Save answer</Button>
+          <Button size="sm" icon={X} onClick={() => dismiss(q)}>Dismiss</Button></div>
+      </div></div>)}</div>
+    {done.length > 0 && <details className="advanced"><summary><ChevronRight size={14} /> Answered recently ({done.length})</summary>
+      <div className="uq-list">{done.map((q) => <div key={q.id} className="uq done"><b className="small">Q: {q.question}</b><div className="small">A: {q.answer}</div><div className="muted small">{when(q.resolved_at)}</div></div>)}</div></details>}
   </Card>)
 }

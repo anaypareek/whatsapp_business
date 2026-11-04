@@ -29,6 +29,22 @@ Route::post('/client/auth/login', [Api\ClientPortalController::class, 'login'])-
 Route::get('/mobile/config', [Api\ClientChatController::class, 'mobileConfig'])->middleware('throttle:60,1');
 
 Route::middleware(['auth:sanctum', EnsureClient::class])->prefix('client')->group(function () {
+    // Train AI for the client's own numbers (controller scopes to $user->phoneNumbers(); key/settings stay admin-only)
+    Route::get('/ai-train/{phoneNumber}', [Api\AiTrainController::class, 'show'])->whereNumber('phoneNumber');
+    Route::get('/ai-train/{phoneNumber}/questions', [Api\AiTrainController::class, 'questions'])->whereNumber('phoneNumber');
+    Route::post('/ai-train/{phoneNumber}/questions/{id}/answer', [Api\AiTrainController::class, 'answerQuestion'])->whereNumber('phoneNumber')->whereNumber('id');
+    Route::get('/ai-train/{phoneNumber}/trainer', [Api\AiTrainController::class, 'trainer'])->whereNumber('phoneNumber');
+    Route::post('/ai-train/{phoneNumber}/trainer', [Api\AiTrainController::class, 'trainerSend'])->whereNumber('phoneNumber')->middleware('throttle:30,1');
+    Route::delete('/ai-train/{phoneNumber}/trainer', [Api\AiTrainController::class, 'trainerClear'])->whereNumber('phoneNumber');
+    Route::delete('/ai-train/{phoneNumber}/questions/{id}', [Api\AiTrainController::class, 'dismissQuestion'])->whereNumber('phoneNumber')->whereNumber('id');
+    Route::post('/ai-train/{phoneNumber}/chat', [Api\AiTrainController::class, 'chat'])->whereNumber('phoneNumber')->middleware('throttle:30,1');
+    Route::post('/ai-train/{phoneNumber}/examples', [Api\AiTrainController::class, 'storeExample'])->whereNumber('phoneNumber');
+    Route::put('/ai-train/{phoneNumber}/examples/{id}', [Api\AiTrainController::class, 'updateExample'])->whereNumber('phoneNumber')->whereNumber('id');
+    Route::delete('/ai-train/{phoneNumber}/examples/{id}', [Api\AiTrainController::class, 'destroyExample'])->whereNumber('phoneNumber')->whereNumber('id');
+    Route::post('/ai-train/{phoneNumber}/files', [Api\AiTrainController::class, 'storeFile'])->whereNumber('phoneNumber');
+    Route::delete('/ai-train/{phoneNumber}/files/{id}', [Api\AiTrainController::class, 'destroyFile'])->whereNumber('phoneNumber')->whereNumber('id');
+    Route::post('/ai-train/{phoneNumber}/images', [Api\AiTrainController::class, 'storeImage'])->whereNumber('phoneNumber');
+    Route::delete('/ai-train/{phoneNumber}/images/{id}', [Api\AiTrainController::class, 'destroyImage'])->whereNumber('phoneNumber')->whereNumber('id');
     // ---- mobile chat (docs/MOBILE.md) ----
     Route::get('/chat/sync', [Api\ClientChatController::class, 'sync'])->middleware('throttle:chat-sync');
     Route::middleware('throttle:chat')->group(function () {
@@ -141,6 +157,8 @@ Route::middleware(['auth:sanctum', EnsureStaff::class])->group(function () {
     Route::put('/ai-replies/{phoneNumber}', [Api\AiReplyController::class, 'update'])->whereNumber('phoneNumber');
     Route::post('/ai-replies/{phoneNumber}/resolve', [Api\AiReplyController::class, 'resolve'])->whereNumber('phoneNumber');
     Route::get('/ai-train/{phoneNumber}', [Api\AiTrainController::class, 'show'])->whereNumber('phoneNumber');
+    Route::get('/ai-train/{phoneNumber}/questions', [Api\AiTrainController::class, 'questions'])->whereNumber('phoneNumber');
+    Route::post('/ai-train/{phoneNumber}/questions/{id}/answer', [Api\AiTrainController::class, 'answerQuestion'])->whereNumber('phoneNumber')->whereNumber('id');
     Route::get('/ai-train/{phoneNumber}/trainer', [Api\AiTrainController::class, 'trainer'])->whereNumber('phoneNumber');
     Route::post('/ai-train/{phoneNumber}/trainer', [Api\AiTrainController::class, 'trainerSend'])->whereNumber('phoneNumber')->middleware('throttle:30,1');
     Route::delete('/ai-train/{phoneNumber}/trainer', [Api\AiTrainController::class, 'trainerClear'])->whereNumber('phoneNumber');

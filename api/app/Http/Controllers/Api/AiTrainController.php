@@ -17,12 +17,14 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
-/** Admin-only "Train AI": playground, Q->A corrections, knowledge files, product images. Everything is scoped per number. */
+/** "Train AI" (admin: all numbers; client portal: own numbers only): playground, Q->A corrections, knowledge files, product images. Everything is scoped per number. */
 class AiTrainController extends Controller
 {
     protected function num(Request $r, int $id): PhoneNumber
     {
-        abort_if($r->user() instanceof Client, 404);
+        // admins: any number; clients (/client/ai-train): only their own numbers, everything else is 404
+        $u = $r->user();
+        if ($u instanceof Client) { $n = $u->phoneNumbers()->find($id); abort_unless($n, 404, 'Number not found'); return $n; }
         return PhoneNumber::findOrFail($id);
     }
 
@@ -58,7 +60,7 @@ class AiTrainController extends Controller
         return [
             'messages' => AiTrainerMessage::where('phone_number_id', $n->id)->latest('id')->limit(50)->get()->reverse()->values()
                 ->map(fn ($m) => $m->only(['id', 'role', 'content', 'saved', 'created_at']) + ['attachments' => collect($m->attachments)->map(fn ($a) => array_intersect_key($a, array_flip(['ref', 'type', 'filename', 'saved'])) + (isset($a['path']) ? ['url' => rtrim(config('app.url'), '/').'/storage/'.$a['path']] : []))->all()]),
-            'open_questions' => AiOpenQuestion::where('phone_number_id', $n->id)->where('status', 'open')->latest('id')->limit(20)->get(['id', 'question', 'created_at']),
+            'open_questions' => static::openList($n),
             'greeting' => AiTrainer::greeting($n),
         ];
     }
@@ -80,6 +82,31 @@ class AiTrainController extends Controller
     {
         AiTrainer::forget($this->num($r, $phoneNumber));
         return ['ok' => true];
+    }
+
+    protected static function openList(PhoneNumber $n)
+    {
+        return AiOpenQuestion::where('phone_number_id', $n->id)->where('status', 'open')->latest('id')->limit(50)
+            ->get(['id', 'question', 'contact_wa_id', 'contact_name', 'created_at']);
+    }
+
+    /** Unanswered customer questions (from AI handoffs) for this number. */
+    public function questions(Request $r, int $phoneNumber)
+    {
+        $n = $this->num($r, $phoneNumber);
+        return ['open' => static::openList($n),
+            'resolved' => AiOpenQuestion::where('phone_number_id', $n->id)->where('status', 'resolved')->latest('resolved_at')->limit(20)->get(['id', 'question', 'answer', 'contact_name', 'resolved_at'])];
+    }
+
+    /** Answer one: saves a rule (Q->A) for THIS number only and resolves the question. */
+    public function answerQuestion(Request $r, int $phoneNumber, int $id)
+    {
+        $n = $this->num($r, $phoneNumber);
+        $q = AiOpenQuestion::where('phone_number_id', $n->id)->where('status', 'open')->findOrFail($id);
+        $a = $r->validate(['answer' => 'required|string|max:2000'])['answer'];
+        $q->update(['status' => 'resolved', 'answer' => $a, 'resolved_at' => now()]);
+        $rule = AiExample::updateOrCreate(['phone_number_id' => $n->id, 'question' => mb_substr($q->question, 0, 1000)], ['answer' => $a]);
+        return ['question' => $q, 'rule' => $rule];
     }
 
     public function dismissQuestion(Request $r, int $phoneNumber, int $id)

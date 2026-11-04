@@ -3,7 +3,7 @@ import { Sparkles, Check, UserRound, KeyRound, Link2, Cpu, Gauge } from 'lucide-
 import { api } from './api'
 import { Button, Card, Field, Badge, Toggle, useToast, useLoad, Empty, Skeleton } from './ui'
 
-const pick = (s) => ({ enabled: !!s.enabled, test_mode: s.test_mode ?? true, allowlist: (s.allowlist || []).join('\n'), knowledge_base: s.knowledge_base || '',
+const pick = (s) => ({ enabled: !!s.enabled, orders_lookup: !!s.orders_lookup, test_mode: s.test_mode ?? true, allowlist: (s.allowlist || []).join('\n'), knowledge_base: s.knowledge_base || '',
   max_per_hour: s.max_per_hour ?? 5, handoff_cooldown_hours: s.handoff_cooldown_hours ?? 24 })
 
 /** Per-number AI chat replies (admin only). Default OFF, test mode ON. */
@@ -41,6 +41,7 @@ function AiForm({ P, row, reload, model }) {
       <form className="form" onSubmit={save}>
         <div className="form-2">
           <div className="field"><span className="field-label">AI replies enabled</span><Toggle checked={f.enabled} onChange={(v) => setF({ ...f, enabled: v })} /></div>
+          <div className="field"><span className="field-label">Order status lookup</span><Toggle checked={f.orders_lookup} onChange={(v) => setF({ ...f, orders_lookup: v })} /><span className="muted small">Uses the Orders API from Settings for this number only</span></div>
           <div className="field"><span className="field-label">Test mode (allowlist only)</span><Toggle checked={f.test_mode} onChange={(v) => setF({ ...f, test_mode: v })} /></div>
         </div>
         {f.test_mode && <Field label="Allowlisted senders" hint="One number per line, with country code (e.g. 919811000001). Only these get AI replies in test mode."><textarea rows={2} value={f.allowlist} onChange={set('allowlist')} placeholder="919811000001" /></Field>}

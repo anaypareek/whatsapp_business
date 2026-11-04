@@ -599,3 +599,9 @@ tr.dim td{opacity:.55}
 .advanced>summary{cursor:pointer;color:#6b7280;font-size:13px;display:flex;gap:4px;align-items:center;padding:6px 0}
 .advanced[open]>summary svg{transform:rotate(90deg)}
 .composer textarea{resize:none;min-height:38px}
+.count-pill{background:#ef4444;color:#fff;border-radius:999px;font-size:11px;padding:0 6px;margin-left:4px}
+.uq-list{display:flex;flex-direction:column;gap:10px;margin-top:10px}
+.uq{border:1px solid #e5e7eb;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.uq.done{gap:2px;background:#f9fafb}
+.uq-head{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.uq-head span{display:inline-flex;gap:4px;align-items:center}

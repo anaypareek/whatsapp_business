@@ -48,7 +48,7 @@ class AiTrainTest extends TestCase
             'graph.facebook.com/*/messages' => fn () => Http::response(['messages' => [['id' => 'wamid.O'.bin2hex(random_bytes(5))]]]),
         ]);
         Carbon::setTestNow(Carbon::parse('2026-11-02 12:00', 'Asia/Kolkata'));
-        AiReplySetting::create(['phone_number_id' => $this->n->id, 'enabled' => true, 'allowlist' => [self::FROM], 'max_per_hour' => 50]);
+        AiReplySetting::create(['phone_number_id' => $this->n->id, 'enabled' => true, 'allowlist' => [self::FROM], 'max_per_hour' => 50, 'orders_lookup' => true]);
     }
 
     protected function tearDown(): void { Carbon::setTestNow(); parent::tearDown(); }

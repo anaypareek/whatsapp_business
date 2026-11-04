@@ -33,7 +33,7 @@ class AiReplyController extends Controller
     public function update(Request $r, int $phoneNumber)
     {
         $n = $this->numbers($r)->findOrFail($phoneNumber);
-        $d = $r->validate(['enabled' => 'boolean', 'test_mode' => 'boolean', 'allowlist' => 'nullable|array|max:200', 'allowlist.*' => 'string|max:32',
+        $d = $r->validate(['enabled' => 'boolean', 'test_mode' => 'boolean', 'orders_lookup' => 'boolean', 'allowlist' => 'nullable|array|max:200', 'allowlist.*' => 'string|max:32',
             'knowledge_base' => 'nullable|string|max:20000', 'max_per_hour' => 'integer|min:1|max:60', 'handoff_cooldown_hours' => 'integer|min:1|max:720']);
         if (array_key_exists('allowlist', $d)) $d['allowlist'] = collect($d['allowlist'] ?? [])->map(fn ($x) => preg_replace('/\D/', '', $x))->filter(fn ($x) => strlen($x) >= 6)->unique()->values()->all();
         return AiReplySetting::updateOrCreate(['phone_number_id' => $n->id], $d);

@@ -60,6 +60,12 @@ class AiReplyService
         return null;
     }
 
+    /** Order lookup is opt-in per number: the Orders API belongs to one business. */
+    public static function ordersEnabled(PhoneNumber $phone): bool
+    {
+        return OrderLookup::configured() && (bool) AiReplySetting::where('phone_number_id', $phone->id)->value('orders_lookup');
+    }
+
     public static function systemPrompt(PhoneNumber $phone, ?string $kb, string $query = ''): string
     {
         $biz = $phone->name ?: 'our business';
@@ -76,7 +82,7 @@ class AiReplyService
         $imgs = AiKnowledge::images($phone, $query);
         if ($imgs->isNotEmpty()) $p .= "\nPRODUCT IMAGES: if the customer asks for a picture/photo of one of these, add the marker [IMAGE:id] to your reply (at most one): "
             .$imgs->map(fn ($i) => "[IMAGE:{$i->id}] {$i->name}".($i->tags ? " ({$i->tags})" : ''))->implode('; ').'. Never use any other id.';
-        if (OrderLookup::configured()) $p .= "\nORDERS: if the customer asks about their order status/delivery, reply with exactly [ORDER_LOOKUP:<order id>] or [ORDER_LOOKUP:mine] if they gave no id. Never guess order details.";
+        if (static::ordersEnabled($phone)) $p .= "\nORDERS: if the customer asks about their order status/delivery, reply with exactly [ORDER_LOOKUP:<order id>] or [ORDER_LOOKUP:mine] if they gave no id. Never guess order details.";
         return $p;
     }
 
@@ -132,7 +138,8 @@ class AiReplyService
         if ($text === null) return 'provider_error';
         if ($text === '') return 'empty';
         $r = static::parse($phone, $text);
-        if ($r['order'] !== null) {
+        if ($r['order'] !== null && ! static::ordersEnabled($phone)) $r = ['handoff' => true] + $r; // marker on a number without lookup
+        if ($r['order'] !== null && static::ordersEnabled($phone)) {
             $id = strtolower($r['order']) === 'mine' ? null : $r['order'];
             $orders = app(OrderLookup::class)->lookup($in->contact_wa_id, $id); // always the sender's own phone
             if (! $orders) return $this->handoff($phone, $in, 'Order lookup '.($orders === null ? 'failed' : 'not found').': '.$in->body);
@@ -140,7 +147,7 @@ class AiReplyService
             return 'order';
         }
         if ($r['handoff']) {
-            \App\Models\AiOpenQuestion::record($phone->id, $in->contact_wa_id, (string) $in->body); // teachable in Train AI
+            \App\Models\AiOpenQuestion::record($phone->id, $in->contact_wa_id, (string) $in->body, $in->contact_name); // teachable in Train AI
             return $this->handoff($phone, $in, (string) $in->body);
         }
         if ($r['image']) {
