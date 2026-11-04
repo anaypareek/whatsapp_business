@@ -48,7 +48,7 @@ const reqForm = (r) => ({ header: r.form?.header ? { format: r.form.header.forma
 export function TemplateRequestsPage() {
   const [rows, reload, loading] = useLoad('/client/template-requests'); const toast = useToast()
   const [creating, setCreating] = useState(false); const [view, setView] = useState(null)
-  if (creating) return <TemplateForm initial={blankForm()} title="Request new template" subtitle="Your administrator reviews it before it is submitted to Meta"
+  if (creating) return <TemplateForm samplePath="/client/template-samples" initial={blankForm()} title="Request new template" subtitle="Your administrator reviews it before it is submitted to Meta"
     submitLabel="Submit request" submit={(body) => api('/client/template-requests', { method: 'POST', body })}
     note={<div className="alert info"><FileText size={16} /> Use lowercase_with_underscores for the name. Variables like {'{{1}}'} need an example value.</div>}
     onDone={() => { toast.success('Template request submitted'); setCreating(false); reload() }} onCancel={() => setCreating(false)} />

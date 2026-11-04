@@ -72,7 +72,7 @@ class TemplateTest extends TestCase
         $this->auth()->postJson('/api/templates', ['name' => 'Bad Name', 'language' => 'en_US', 'category' => 'UTILITY', 'body' => ['text' => 'x']])->assertStatus(422)->assertJsonValidationErrors('name');
         $this->auth()->postJson('/api/templates', ['name' => 'a', 'language' => 'en_US', 'category' => 'UTILITY', 'body' => ['text' => 'Hi {{1}} there']])->assertStatus(422)->assertJsonValidationErrors('body.examples');
         $this->auth()->postJson('/api/templates', ['name' => 'a', 'language' => 'en_US', 'category' => 'UTILITY', 'body' => ['text' => 'Hi {{1}} and {{3}} x', 'examples' => ['a', 'b', 'c']]])->assertStatus(422)->assertJsonValidationErrors('body.text');
-        $this->auth()->postJson('/api/templates', ['name' => 'a', 'language' => 'en_US', 'category' => 'UTILITY', 'header' => ['format' => 'IMAGE'], 'body' => ['text' => 'x']])->assertStatus(422)->assertJsonValidationErrors('header.example');
+        $this->auth()->postJson('/api/templates', ['name' => 'a', 'language' => 'en_US', 'category' => 'UTILITY', 'header' => ['format' => 'IMAGE'], 'body' => ['text' => 'x']])->assertStatus(422)->assertJsonValidationErrors('header.sample');
     }
 
     public function test_edit_limits(): void

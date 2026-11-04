@@ -25,6 +25,14 @@ class TemplateController extends Controller
 
     public function show(MessageTemplate $template) { return $template->load(['events' => fn ($q) => $q->latest()->limit(20)]); }
 
+    /** POST /templates/sample (multipart: file, format). Stores a header media sample; it is uploaded to Meta on submit. */
+    public function sample(Request $r)
+    {
+        $r->validate(['file' => 'required|file', 'format' => 'required|in:IMAGE,VIDEO,DOCUMENT']);
+        $owner = $r->user() instanceof \App\Models\Client ? 'c'.$r->user()->id : 'a';
+        return response()->json(\App\Services\TemplateSamples::store($r->file('file'), $r->input('format'), $owner), 201);
+    }
+
     public function store(Request $r, WhatsAppService $wa)
     {
         $d = $r->validate(TemplateBuilder::rules() + ['client_id' => 'nullable|exists:clients,id']);
@@ -33,8 +41,10 @@ class TemplateController extends Controller
         }
         $components = TemplateBuilder::components($d);
         try {
+            $components = \App\Services\TemplateSamples::resolve($components, $d['header'] ?? null, $wa);
             $res = $wa->createTemplate(['name' => $d['name'], 'language' => $d['language'], 'category' => $d['category'], 'components' => $components]);
-        } catch (Throwable $e) { return $this->fail($e); }
+        } catch (\Illuminate\Validation\ValidationException $e) { throw $e; }
+        catch (Throwable $e) { return $this->fail($e); }
         $t = MessageTemplate::create([
             'client_id' => $d['client_id'] ?? null, 'meta_id' => $res['id'] ?? null, 'waba_id' => Setting::get('waba_id'), 'name' => $d['name'], 'language' => $d['language'],
             'category' => $res['category'] ?? $d['category'], 'status' => $res['status'] ?? 'PENDING', 'components' => $components,
@@ -54,6 +64,11 @@ class TemplateController extends Controller
             return response()->json(['message' => 'Meta does not allow changing a template\'s name or language. Create a new template instead.'], 422);
         }
         $payload = ['components' => TemplateBuilder::components($d)];
+        if (! empty($d['header']['sample'])) {
+            try { $payload['components'] = \App\Services\TemplateSamples::resolve($payload['components'], $d['header'], $wa); }
+            catch (\Illuminate\Validation\ValidationException $e) { throw $e; }
+            catch (Throwable $e) { return $this->fail($e); }
+        }
         $categoryChanged = isset($d['category']) && $d['category'] !== $template->category;
         $contentChanged = $categoryChanged || self::canon($payload['components']) !== self::canon($template->components ?? []);
         if (! $contentChanged) {

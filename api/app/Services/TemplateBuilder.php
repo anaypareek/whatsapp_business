@@ -17,6 +17,8 @@ class TemplateBuilder
             'header.format' => 'nullable|in:NONE,TEXT,IMAGE,DOCUMENT,VIDEO',
             'header.text' => 'nullable|string|max:60',
             'header.example' => 'nullable|string|max:1000', // text var example, or media header_handle
+            'header.sample' => 'nullable|string|max:200', // stored media sample token (uploaded to Meta at submit time)
+            'header.sample_name' => 'nullable|string|max:200',
             'body' => 'required|array',
             'body.text' => 'required|string|max:1024',
             'body.examples' => 'nullable|array',
@@ -48,8 +50,10 @@ class TemplateBuilder
             }
             $out[] = $c;
         } elseif (in_array($fmt, ['IMAGE', 'DOCUMENT', 'VIDEO'])) {
-            if (empty($h['example'])) $errors['header.example'] = 'Media headers need a sample: a header_handle from Meta\'s Resumable Upload API.';
-            $out[] = ['type' => 'HEADER', 'format' => $fmt, 'example' => ['header_handle' => [$h['example'] ?? '']]];
+            if (empty($h['example']) && empty($h['sample'])) $errors['header.sample'] = 'Upload a sample '.strtolower($fmt).' for the header ('.TemplateSamples::LIMITS[$fmt][3].').';
+            elseif (! empty($h['sample']) && ! TemplateSamples::valid($h['sample'])) $errors['header.sample'] = 'The header sample file is missing or expired. Upload it again.';
+            // with a stored sample the handle is filled in by TemplateSamples::resolve() right before submitting to Meta
+            $out[] = ['type' => 'HEADER', 'format' => $fmt, 'example' => ['header_handle' => [empty($h['sample']) ? ($h['example'] ?? '') : '']]];
         }
 
         $body = $d['body']['text'];

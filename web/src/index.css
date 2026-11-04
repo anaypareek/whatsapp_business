@@ -605,3 +605,5 @@ tr.dim td{opacity:.55}
 .uq.done{gap:2px;background:#f9fafb}
 .uq-head{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .uq-head span{display:inline-flex;gap:4px;align-items:center}
+
+.media-sample{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.media-sample-img{max-height:64px;max-width:120px;border-radius:6px;border:1px solid var(--border,#ddd)}.media-sample-name{font-size:13px}

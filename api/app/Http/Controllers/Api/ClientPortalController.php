@@ -65,6 +65,10 @@ class ClientPortalController extends Controller
     public function storeTemplateRequest(Request $r)
     {
         [$d, $form, $components] = TemplateRequestController::build($r);
+        $sample = $d['header']['sample'] ?? null;
+        if ($sample && ! \App\Services\TemplateSamples::valid($sample, 'c'.$r->user()->id)) {
+            return response()->json(['message' => 'The header sample file is missing or expired. Upload it again.', 'errors' => ['header.sample' => ['Invalid sample']]], 422);
+        }
         return response()->json($r->user()->templateRequests()->create([
             'name' => $d['name'], 'language' => $d['language'], 'category' => $d['category'], 'form' => $form, 'components' => $components, 'status' => 'pending',
         ]), 201);

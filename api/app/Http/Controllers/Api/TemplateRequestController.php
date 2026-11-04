@@ -54,7 +54,10 @@ class TemplateRequestController extends Controller
             return response()->json(['message' => 'A template with this name and language already exists. Edit the request name first.'], 422);
         }
         try {
-            $res = $wa->createTemplate(['name' => $t->name, 'language' => $t->language, 'category' => $t->category, 'components' => $t->components]);
+            $components = \App\Services\TemplateSamples::resolve($t->components ?? [], $t->form['header'] ?? null, $wa);
+            $res = $wa->createTemplate(['name' => $t->name, 'language' => $t->language, 'category' => $t->category, 'components' => $components]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw $e;
         } catch (Throwable $e) {
             $t->update(['meta_error' => $e->getMessage()]);
             return $this->fail($e, 502, ['request' => $t->fresh()->load(self::WITH)]);
@@ -62,7 +65,7 @@ class TemplateRequestController extends Controller
         $tpl = MessageTemplate::create([
             'client_id' => $t->client_id, 'meta_id' => $res['id'] ?? null, 'waba_id' => Setting::get('waba_id'),
             'name' => $t->name, 'language' => $t->language, 'category' => $res['category'] ?? $t->category,
-            'status' => $res['status'] ?? 'PENDING', 'components' => $t->components,
+            'status' => $res['status'] ?? 'PENDING', 'components' => $components,
         ]);
         $t->update(['status' => 'approved', 'message_template_id' => $tpl->id, 'meta_error' => null, 'rejection_reason' => null,
             'reviewed_by' => $r->user()->id, 'reviewed_at' => now()]);

@@ -167,6 +167,29 @@ class WhatsAppService
         return $all;
     }
 
+    /**
+     * Meta Resumable Upload API: returns the file handle "h" used as a template media header sample.
+     * 1) POST /{app_id}/uploads?file_name&file_length&file_type&access_token -> {id: "upload:…"}
+     * 2) POST /{upload_session_id} (Authorization: OAuth {token}, file_offset: 0, raw bytes) -> {h}
+     */
+    public function uploadSample(string $path, string $mime, string $filename): string
+    {
+        $appId = Setting::get('app_id');
+        $token = Setting::get('access_token');
+        if (! $appId) throw new RuntimeException('Meta App ID is not configured (Settings → Meta App ID). It is required to upload template media samples.');
+        if (! $token) throw new RuntimeException('Meta access token is not configured (Settings).');
+        if (! is_file($path)) throw new RuntimeException('The header sample file is missing. Upload it again.');
+        $len = filesize($path);
+        $q = http_build_query(['file_name' => $filename, 'file_length' => $len, 'file_type' => $mime, 'access_token' => $token]);
+        $session = $this->check(Http::acceptJson()->timeout(30)->post($this->baseUrl()."/{$appId}/uploads?{$q}"));
+        $sid = $session['id'] ?? null;
+        if (! $sid) throw new RuntimeException('Meta did not return an upload session id.');
+        $res = $this->check(Http::withHeaders(['Authorization' => "OAuth {$token}", 'file_offset' => '0'])->acceptJson()->timeout(120)
+            ->withBody(fopen($path, 'r'), $mime)->post($this->baseUrl()."/{$sid}"));
+        if (empty($res['h'])) throw new RuntimeException('Meta did not return a file handle for the header sample.');
+        return $res['h'];
+    }
+
     /** Returns {id, status, category}. */
     public function createTemplate(array $payload, ?string $wabaId = null): array
     {

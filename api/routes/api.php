@@ -91,6 +91,7 @@ Route::middleware(['auth:sanctum', EnsureClient::class])->prefix('client')->grou
     Route::post('/number-requests', [Api\ClientPortalController::class, 'storeNumberRequest'])->middleware('throttle:20,1');
     Route::get('/template-requests', [Api\ClientPortalController::class, 'templateRequests']);
     Route::post('/template-requests', [Api\ClientPortalController::class, 'storeTemplateRequest'])->middleware('throttle:20,1');
+    Route::post('/template-samples', [Api\TemplateController::class, 'sample'])->middleware('throttle:30,1');
     Route::get('/flow-numbers', [Api\FlowController::class, 'numberOptions']);
     Route::post('/flows-simulate', [Api\FlowController::class, 'simulate'])->middleware('throttle:120,1');
     Route::get('/greetings', [Api\GreetingController::class, 'index']);
@@ -133,6 +134,7 @@ Route::middleware(['auth:sanctum', EnsureStaff::class])->group(function () {
     Route::post('/phone-numbers/{phoneNumber}/request-code', [Api\PhoneNumberOnboardingController::class, 'requestCode'])->middleware('throttle:number-onboard');
     Route::post('/phone-numbers/{phoneNumber}/verify-code', [Api\PhoneNumberOnboardingController::class, 'verifyCode'])->middleware('throttle:number-onboard');
 
+    Route::post('/template-samples', [Api\TemplateController::class, 'sample'])->middleware('throttle:30,1');
     Route::apiResource('templates', Api\TemplateController::class);
     Route::get('/templates/{template}/test', [Api\TemplateController::class, 'testPreview']);
     Route::post('/templates/{template}/test', [Api\TemplateController::class, 'testSend'])->middleware('throttle:20,1');

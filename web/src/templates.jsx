@@ -44,9 +44,41 @@ export function toForm(t) {
 }
 export const blankForm = () => ({ name: '', language: 'en_US', category: 'UTILITY', header: { format: 'NONE', text: '', example: '' }, body: { text: '', examples: [] }, footer: '', buttons: [] })
 
+const SAMPLE = { IMAGE: ['.jpg,.jpeg,.png', ['image/jpeg', 'image/png'], 5, 'JPG or PNG, max 5 MB'], VIDEO: ['.mp4', ['video/mp4'], 16, 'MP4, max 16 MB'], DOCUMENT: ['.pdf', ['application/pdf'], 100, 'PDF, max 100 MB'] }
+
+/** Sample file for a media header. Stored on our server; it is uploaded to Meta (Resumable Upload API) when the template is submitted. */
+export function MediaSample({ path, header, onChange }) {
+  const [accept, mimes, maxMb, label] = SAMPLE[header.format]
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState(''); const [url, setUrl] = useState('')
+  const toast = useToast()
+  const pick = async (file) => {
+    setErr('')
+    if (!file) return
+    if (!mimes.includes(file.type)) { setErr(`Wrong file type. Use ${label}.`); return }
+    if (file.size > maxMb * 1024 * 1024) { setErr(`File is too large. Use ${label}.`); return }
+    // multipart (never an empty JSON POST body: shared-host ModSecurity rejects those)
+    const form = new FormData(); form.append('format', header.format); form.append('file', file)
+    setBusy(true)
+    try {
+      const r = await api(path, { method: 'POST', form })
+      setUrl(header.format === 'IMAGE' ? URL.createObjectURL(file) : '')
+      onChange({ sample: r.sample, sample_name: r.filename, example: '' })
+    } catch (e) { setErr(e.message); toast.error(e.message) } finally { setBusy(false) }
+  }
+  const has = header.sample || header.example
+  return <Field label={`Sample ${header.format.toLowerCase()}`} hint={`${label}. Meta reviewers see this sample; it is uploaded to Meta when the template is submitted.`} className="span2">
+    <div className="media-sample">
+      <label className="btn sm"><input type="file" accept={accept} hidden disabled={busy} onChange={(e) => { pick(e.target.files?.[0]); e.target.value = '' }} />{busy ? 'Uploading…' : has ? 'Replace file' : 'Choose file'}</label>
+      {url && <img src={url} alt="Sample preview" className="media-sample-img" />}
+      {header.sample ? <span className="media-sample-name">✓ {header.sample_name || 'Sample file'}</span> : header.example ? <span className="muted">Existing Meta sample</span> : <span className="muted">No file chosen</span>}
+    </div>
+    {err && <small className="err-text">{err}</small>}
+  </Field>
+}
+
 /** Full template builder with live preview. Reused by the admin (Template Master, Template Requests) and the client portal.
  *  submit(body) overrides the default POST/PUT to /templates; title/subtitle/submitLabel/note customise the header. */
-export function TemplateForm({ initial, editing, onDone, onCancel, submit, title, subtitle, submitLabel, note, extraActions, clients }) {
+export function TemplateForm({ initial, editing, onDone, onCancel, submit, title, subtitle, submitLabel, note, extraActions, clients, samplePath = '/template-samples' }) {
   const [f, setF] = useState(initial)
   const [clientId, setClientId] = useState(editing?.client_id ? String(editing.client_id) : '')
   const [busy, setBusy] = useState(false); const toast = useToast()
@@ -108,7 +140,7 @@ export function TemplateForm({ initial, editing, onDone, onCancel, submit, title
             {f.header.format === 'TEXT' && <Field label="Header text" hint={headVars > 1 ? <span className="err-text">Only one variable is allowed in the header</span> : 'Max 60 characters, at most one {{1}}'} className="span2">
               <div className="row gap8"><input ref={headRef} maxLength={60} value={f.header.text} onChange={(e) => setHeadText(e.target.value)} style={{ flex: 1 }} />
                 <button type="button" className="tb-btn wide" disabled={headVars >= 1} title={headVars >= 1 ? 'The header already has its variable' : 'Insert {{1}}'} onMouseDown={(e) => e.preventDefault()} onClick={addHeadVar}>+ Variable</button></div></Field>}
-            {['IMAGE', 'DOCUMENT', 'VIDEO'].includes(f.header.format) && <Field label="Sample header_handle" hint="From Meta's Resumable Upload API" className="span2"><input value={f.header.example} onChange={(e) => setH({ example: e.target.value })} /></Field>}
+            {['IMAGE', 'DOCUMENT', 'VIDEO'].includes(f.header.format) && <MediaSample key={f.header.format} path={samplePath} header={f.header} onChange={setH} />}
           </div>
           {f.header.format === 'TEXT' && headVars > 0 && <Field label="Header {{1}} sample"><input value={f.header.example} onChange={(e) => setH({ example: e.target.value })} /></Field>}
           <Field label={`Body (${f.body.text.length}/1024)`} hint="Select text and use the toolbar; variables renumber automatically">
