@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'src/api.dart';
 import 'src/config.dart';
 import 'src/models.dart';
@@ -59,6 +60,7 @@ class _WaAppState extends State<WaApp> {
   Future<void> _registerPush({bool report = false}) async {
     final p = s.push;
     if (p == null) return;
+    await _ensureNotificationPermission();
     try {
       await p.register();
     } catch (e) {
@@ -74,6 +76,27 @@ class _WaAppState extends State<WaApp> {
       return;
     }
     await _showPushWarning(why);
+  }
+
+  static const _notif = MethodChannel('wab/notifications');
+
+  /// Asks Android 13+ POST_NOTIFICATIONS natively (after the first frame, so an Activity is in front).
+  /// If Android will not show the dialog (denied before / turned off in settings), offer to open the settings page.
+  Future<void> _ensureNotificationPermission() async {
+    try {
+      await WidgetsBinding.instance.endOfFrame;
+      if (await _notif.invokeMethod<bool>('enabled') == true) return;
+      final ok = await _notif.invokeMethod<bool>('request') == true;
+      if (ok || await _notif.invokeMethod<bool>('enabled') == true) return;
+      final messenger = _msg.currentState;
+      messenger?.showSnackBar(SnackBar(
+        content: const Text('Notifications are turned off for this app. Turn them on to get new-message alerts.'),
+        duration: const Duration(seconds: 20),
+        action: SnackBarAction(label: 'Open settings', onPressed: () => _notif.invokeMethod('openSettings')),
+      ));
+    } catch (e) {
+      debugPrint('notification permission check failed: $e');
+    }
   }
 
   Future<void> _showPushWarning(String why) => _showSnack('Notifications off: $why', seconds: 12);
