@@ -96,7 +96,7 @@ class AiTakeoverTest extends TestCase
 
     protected function sent(): array
     {
-        return collect(Http::recorded())->map(fn ($p) => $p[0])->filter(fn (HttpRequest $r) => str_ends_with($r->url(), '/messages'))
+        return collect(Http::recorded())->map(fn ($p) => $p[0])->filter(fn (HttpRequest $r) => str_ends_with($r->url(), '/messages') && ($r['status'] ?? null) !== 'read')
             ->map(fn ($r) => $r['text']['body'] ?? '?')->values()->all();
     }
 

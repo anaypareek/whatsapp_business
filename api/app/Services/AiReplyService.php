@@ -199,6 +199,17 @@ class AiReplyService
         return 'handoff';
     }
 
+    /** Best-effort "typing…" (also marks the inbound read). Only called once all skip checks passed; never blocks the reply. */
+    protected function typing(PhoneNumber $phone, Message $in, ?AiReplySetting $s): void
+    {
+        if (! $s || $s->typing_indicator === false || ! $in->wamid || ! $phone->phone_number_id) return;
+        try {
+            app(WhatsAppService::class)->sendTypingIndicator((string) $phone->phone_number_id, (string) $in->wamid);
+        } catch (Throwable $e) {
+            Log::info('AI typing indicator failed: '.class_basename($e).' '.mb_substr($e->getMessage(), 0, 200), ['phone_number_id' => $phone->id]);
+        }
+    }
+
     /** Generate and send the reply. Returns 'sent', 'image', 'order', 'handoff', 'handoff_silent' or the skip/error reason. */
     public function reply(PhoneNumber $phone, Message $in): string
     {
@@ -210,6 +221,7 @@ class AiReplyService
         $history = Message::where('phone_number_id', $phone->id)->where('contact_wa_id', $in->contact_wa_id)->where('id', '<=', $in->id)
             ->whereNotNull('body')->orderByDesc('id')->limit(self::HISTORY)->get()->reverse()
             ->map(fn ($m) => ['role' => $m->direction === 'in' ? 'user' : 'assistant', 'content' => mb_substr((string) $m->body, 0, 1000)])->values()->all();
+        if (! $inCooldown) $this->typing($phone, $in, $s); // not during the needs_human silence (reply may be suppressed)
         $text = $this->complete($phone, $s->knowledge_base, $history);
         if ($text === null) return 'provider_error';
         if ($text === '') return 'empty';

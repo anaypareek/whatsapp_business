@@ -39,7 +39,7 @@ class AiReplyController extends Controller
     {
         $n = $this->numbers($r)->findOrFail($phoneNumber);
         $d = $r->validate([
-            'enabled' => 'boolean', 'test_mode' => 'boolean', 'orders_lookup' => 'boolean',
+            'enabled' => 'boolean', 'test_mode' => 'boolean', 'orders_lookup' => 'boolean', 'typing_indicator' => 'boolean',
             'allowlist' => 'nullable|array|max:200', 'allowlist.*' => 'string|max:32',
             'knowledge_base' => 'nullable|string|max:20000',
             'max_per_hour' => 'integer|min:1|max:60',

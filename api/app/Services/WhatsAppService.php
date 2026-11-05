@@ -79,6 +79,14 @@ class WhatsAppService
         ]));
     }
 
+    /** Mark an inbound message read and show the "typing…" indicator (up to 25s or until our next message). */
+    public function sendTypingIndicator(string $phoneNumberId, string $wamid): array
+    {
+        return $this->check($this->client()->timeout(5)->post($this->baseUrl()."/{$phoneNumberId}/messages", [
+            'messaging_product' => 'whatsapp', 'status' => 'read', 'message_id' => $wamid, 'typing_indicator' => ['type' => 'text'],
+        ]));
+    }
+
     /** Upload media; returns Meta media id. */
     public function uploadMedia(string $phoneNumberId, UploadedFile|string $file, ?string $mime = null, ?string $filename = null): string
     {

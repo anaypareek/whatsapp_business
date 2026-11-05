@@ -26,6 +26,7 @@ class AiReplyTest extends TestCase
     protected int $seq = 0;
     protected string $aiAnswer = "Hi Ravi! 👋 I'm doing great, thanks for asking! 😊 How can I help you? 😊";
     protected int $aiStatus = 200;
+    protected int $typingStatus = 200;
     protected const FROM = '919811000001';
 
     protected function setUp(): void
@@ -37,7 +38,9 @@ class AiReplyTest extends TestCase
         $this->n = PhoneNumber::create(['client_id' => $this->c->id, 'phone_number_id' => '7001', 'display_number' => '+91 90909 00894', 'name' => 'Oswal']);
         Http::fake([
             'llm.test/*' => fn () => Http::response($this->aiStatus === 200 ? ['choices' => [['message' => ['role' => 'assistant', 'content' => $this->aiAnswer]]]] : ['error' => 'boom'], $this->aiStatus),
-            'graph.facebook.com/*/messages' => fn () => Http::response(['messages' => [['id' => 'wamid.O'.bin2hex(random_bytes(5))]]]),
+            'graph.facebook.com/*/messages' => fn (HttpRequest $r) => isset($r['typing_indicator'])
+                ? Http::response($this->typingStatus === 200 ? ['success' => true] : ['error' => ['message' => 'nope']], $this->typingStatus)
+                : Http::response(['messages' => [['id' => 'wamid.O'.bin2hex(random_bytes(5))]]]),
         ]);
         Carbon::setTestNow(Carbon::parse('2026-11-02 12:00', 'Asia/Kolkata'));
     }
@@ -63,7 +66,7 @@ class AiReplyTest extends TestCase
 
     protected function sent(): array
     {
-        return collect(Http::recorded())->map(fn ($p) => $p[0])->filter(fn (HttpRequest $r) => str_ends_with($r->url(), '/messages'))->map(fn ($r) => $r['text']['body'] ?? '?')->values()->all();
+        return collect(Http::recorded())->map(fn ($p) => $p[0])->filter(fn (HttpRequest $r) => str_ends_with($r->url(), '/messages') && ($r['status'] ?? null) !== 'read')->map(fn ($r) => $r['text']['body'] ?? '?')->values()->all();
     }
 
     protected function aiCalls() { return collect(Http::recorded())->map(fn ($p) => $p[0])->filter(fn (HttpRequest $r) => str_contains($r->url(), 'llm.test'))->values(); }
@@ -288,4 +291,59 @@ class AiReplyTest extends TestCase
         $this->admin()->putJson("/api/ai-replies/{$this->n->id}", ['enabled' => true, 'allowlist' => ['+91 98110 00001']])
             ->assertSuccessful()->assertJsonPath('allowlist.0', '919811000001')->assertJsonPath('test_mode', true);
     }
+
+    protected function typings() { return collect(Http::recorded())->map(fn ($p) => $p[0])->filter(fn (HttpRequest $r) => isset($r['typing_indicator']))->values(); }
+
+    public function test_typing_indicator_sent_before_ai_call_and_marks_read(): void
+    {
+        $this->enable();
+        $this->text('hello there');
+        $t = $this->typings();
+        $this->assertCount(1, $t);
+        $this->assertStringEndsWith('/7001/messages', $t[0]->url());
+        $this->assertSame(['messaging_product' => 'whatsapp', 'status' => 'read', 'message_id' => 'wamid.IN1', 'typing_indicator' => ['type' => 'text']], $t[0]->data());
+        $urls = collect(Http::recorded())->map(fn ($p) => $p[0]->url())->values();
+        $this->assertLessThan($urls->search(fn ($u) => str_contains($u, 'llm.test')), $urls->search(fn ($u) => str_ends_with($u, '/messages')));
+        $this->assertSame([$this->aiAnswer], $this->sent());
+        $this->assertTrue(AiReplySetting::first()->typing_indicator); // default ON
+    }
+
+    public function test_typing_indicator_failure_never_blocks_reply(): void
+    {
+        $this->enable();
+        $this->typingStatus = 500;
+        $this->text('hello there');
+        $this->assertCount(1, $this->typings());
+        $this->assertSame([$this->aiAnswer], $this->sent());
+    }
+
+    public function test_typing_indicator_can_be_turned_off_per_number(): void
+    {
+        $this->enable();
+        $this->admin()->putJson("/api/ai-replies/{$this->n->id}", ['typing_indicator' => false])->assertOk()->assertJsonPath('typing_indicator', false);
+        $this->text('hello there');
+        $this->assertCount(0, $this->typings());
+        $this->assertSame([$this->aiAnswer], $this->sent());
+    }
+
+    public function test_no_typing_indicator_when_ai_will_not_answer(): void
+    {
+        $this->enable(['human_active_quiet_minutes' => 0]);
+        // manual takeover
+        AiContactState::takeOver($this->n->id, self::FROM, $this->admin);
+        $this->text('hello');
+        $this->assertCount(0, $this->typings());
+        AiContactState::query()->delete();
+        // needs_human silence (cooldown)
+        AiContactState::create(['phone_number_id' => $this->n->id, 'contact_wa_id' => self::FROM, 'needs_human' => true, 'handoff_at' => now()]);
+        $this->text('still there?');
+        $this->assertCount(0, $this->typings());
+        AiContactState::query()->delete();
+        // no credits (client blocks when empty)
+        $this->c->update(['ai_block_when_empty' => true]);
+        $this->text('hello again');
+        $this->assertCount(0, $this->typings());
+        $this->assertCount(1, $this->aiCalls()); // only the cooldown smart-continue call reached the model
+    }
 }
+
