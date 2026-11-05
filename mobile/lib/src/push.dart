@@ -160,6 +160,15 @@ class PushService {
   }
 
   Future<void> _registerOnce() async {
+    // Ask for Android 13+ notification permission right after login, independent of Firebase/config,
+    // so a server-config or Firebase failure never hides the permission prompt.
+    if (api.token != null) {
+      try {
+        await _local.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission();
+      } catch (e) {
+        debugPrint('push: permission request failed: $e');
+      }
+    }
     try {
       await init();
     } catch (e) {
