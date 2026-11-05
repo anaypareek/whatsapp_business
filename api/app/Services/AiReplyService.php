@@ -1,6 +1,7 @@
 <?php
 namespace App\Services;
 
+use App\Jobs\SendHandoffPush;
 use App\Models\AiContactState;
 use App\Models\AiProductImage;
 use App\Models\AiReplySetting;
@@ -14,6 +15,10 @@ use Throwable;
 /**
  * AI chat reply (OpenAI-compatible chat completions). Runs only when flows, keyword rules and greeting did not reply.
  * Off by default per number; test mode (allowlist only) on by default. The API key is never logged or returned.
+ *
+ * Handoff: first unanswered question sends a fixed connecting message + one FCM push and sets needs_human.
+ * During handoff_cooldown_hours the AI may still answer known questions from KB; a second handoff stays silent
+ * (records Unanswered, no re-push). Human outbound in the last human_active_quiet_minutes keeps AI quiet.
  */
 class AiReplyService
 {
@@ -24,7 +29,8 @@ class AiReplyService
     public const MAX_TOKENS = 200;
     public const TIMEOUT = 20;
     public const HANDOFF_TOKEN = '[HANDOFF]';
-    public const HANDOFF_TEXT = "Thanks for your patience 🙏 I'm not fully sure about that, so a team member will get back to you shortly. 😊";
+    public const HANDOFF_TEXT = 'I am connecting you with our team member, please wait 🙏';
+    public const HANDOFF_TEXT_HI = 'Main aapko hamare team member se connect kar raha hoon, kripya wait karein 🙏';
 
     public function __construct(protected MessagingService $messaging) {}
 
@@ -52,13 +58,57 @@ class AiReplyService
         // 24h customer service window: the inbound itself must be recent (Meta retries / backfills of old messages are skipped)
         if ($in->created_at && $in->created_at->lt(now()->subHours(24))) return 'outside_window';
         if (! static::config()['key']) return 'no_api_key';
-        $st = AiContactState::where('phone_number_id', $phone->id)->where('contact_wa_id', $in->contact_wa_id)->first();
-        if ($st && $st->needs_human && $st->handoff_at && $st->handoff_at->gt(now()->subHours(max(1, $s->handoff_cooldown_hours)))) return 'handoff';
+        // human actively chatting: stay quiet for N minutes after any non-auto outbound
+        if ($this->humanRecentlyActive($phone, $in, $s)) return 'human_active';
+        // needs_human no longer hard-skips: smart continue still calls the model during the cooldown
         $conv = Message::where('phone_number_id', $phone->id)->where('contact_wa_id', $in->contact_wa_id)->where('direction', 'out')->where('source', 'ai');
         if ((clone $conv)->where('created_at', '>=', now()->subHour())->count() >= max(1, $s->max_per_hour)) return 'rate_limit_contact';
         if (Message::where('direction', 'out')->where('source', 'ai')->where('created_at', '>=', now()->subHour())->count() >= max(1, static::config()['global_per_hour'])) return 'rate_limit_global';
         if ($why = app(AiUsageService::class)->skipReason($phone)) return $why;
         return null;
+    }
+
+    /** True when a staff/manual outbound was sent to this contact in the quiet window. */
+    public function humanRecentlyActive(PhoneNumber $phone, Message $in, ?AiReplySetting $s = null): bool
+    {
+        $s ??= AiReplySetting::where('phone_number_id', $phone->id)->first();
+        $mins = max(0, (int) ($s->human_active_quiet_minutes ?? 30));
+        if ($mins <= 0) return false;
+        return Message::where('phone_number_id', $phone->id)->where('contact_wa_id', $in->contact_wa_id)
+            ->where('direction', 'out')->where('is_auto', false)
+            ->where('created_at', '>=', now()->subMinutes($mins))->exists();
+    }
+
+    /** True while needs_human is set and handoff_at is still inside the cooldown window. */
+    public function inHandoffCooldown(PhoneNumber $phone, Message $in, ?AiReplySetting $s = null): bool
+    {
+        $s ??= AiReplySetting::where('phone_number_id', $phone->id)->first();
+        if (! $s) return false;
+        $st = AiContactState::where('phone_number_id', $phone->id)->where('contact_wa_id', $in->contact_wa_id)->first();
+        return (bool) ($st && $st->needs_human && $st->handoff_at && $st->handoff_at->gt(now()->subHours(max(1, $s->handoff_cooldown_hours))));
+    }
+
+    /** Devanagari or common Hinglish tokens → Hindi/Hinglish handoff text. */
+    public static function prefersHindi(string $text): bool
+    {
+        if (preg_match('/\p{Devanagari}/u', $text)) return true;
+        $t = mb_strtolower($text);
+        foreach (['kya', 'hai', 'nahi', 'nahin', 'mujhe', 'mera', 'meri', 'hamara', 'kripya', 'krpya', 'dhanyavad', 'namaste', 'bhejo', 'batao', 'bataye', 'kitna', 'kaise', 'aapko', 'please wait', 'number do', 'number bhejo', 'contact number'] as $w) {
+            if (str_contains($t, $w)) return true;
+        }
+        return false;
+    }
+
+    /** Resolve customer-facing handoff text (per-number override or default; Hindi variant when customer wrote in Hindi/Hinglish). */
+    public function handoffText(?AiReplySetting $s, string $customerText = ''): string
+    {
+        $hi = static::prefersHindi($customerText);
+        if ($hi) {
+            $custom = trim((string) ($s->handoff_text_hi ?? ''));
+            return $custom !== '' ? $custom : self::HANDOFF_TEXT_HI;
+        }
+        $custom = trim((string) ($s->handoff_text ?? ''));
+        return $custom !== '' ? $custom : self::HANDOFF_TEXT;
     }
 
     /** Order lookup is opt-in per number: the Orders API belongs to one business. */
@@ -123,21 +173,36 @@ class AiReplyService
         return $out;
     }
 
-    protected function handoff(PhoneNumber $phone, Message $in, string $reason): string
+    /**
+     * First handoff: set needs_human, send connecting text once, push once.
+     * Re-entry while already needs_human inside cooldown must not call this (use silent path).
+     */
+    protected function handoff(PhoneNumber $phone, Message $in, string $reason, ?AiReplySetting $s = null): string
     {
-        AiContactState::updateOrCreate(['phone_number_id' => $phone->id, 'contact_wa_id' => $in->contact_wa_id],
-            ['needs_human' => true, 'handoff_at' => now(), 'reason' => mb_substr($reason, 0, 255)]);
-        $this->messaging->send($phone, $in->contact_wa_id, self::HANDOFF_TEXT, source: 'ai');
+        $s ??= AiReplySetting::where('phone_number_id', $phone->id)->first();
+        $already = $this->inHandoffCooldown($phone, $in, $s);
+        AiContactState::updateOrCreate(
+            ['phone_number_id' => $phone->id, 'contact_wa_id' => $in->contact_wa_id],
+            ['needs_human' => true, 'handoff_at' => now(), 'reason' => mb_substr($reason, 0, 255)]
+        );
+        if ($already) {
+            // safety: never re-send text / re-push within cooldown
+            return 'handoff_silent';
+        }
+        $text = $this->handoffText($s, (string) $in->body);
+        $this->messaging->send($phone, $in->contact_wa_id, $text, source: 'ai');
+        SendHandoffPush::dispatchSync($phone->id, (string) $in->contact_wa_id, (string) $reason, $in->contact_name);
         return 'handoff';
     }
 
-    /** Generate and send the reply. Returns 'sent', 'image', 'order', 'handoff' or the skip/error reason. */
+    /** Generate and send the reply. Returns 'sent', 'image', 'order', 'handoff', 'handoff_silent' or the skip/error reason. */
     public function reply(PhoneNumber $phone, Message $in): string
     {
         if ($why = $this->skipReason($phone, $in)) return $why;
         // another reply (staff/flow) already went out after this message: stay quiet
         if (Message::where('phone_number_id', $phone->id)->where('contact_wa_id', $in->contact_wa_id)->where('direction', 'out')->where('id', '>', $in->id)->exists()) return 'already_replied';
         $s = AiReplySetting::where('phone_number_id', $phone->id)->first();
+        $inCooldown = $this->inHandoffCooldown($phone, $in, $s);
         $history = Message::where('phone_number_id', $phone->id)->where('contact_wa_id', $in->contact_wa_id)->where('id', '<=', $in->id)
             ->whereNotNull('body')->orderByDesc('id')->limit(self::HISTORY)->get()->reverse()
             ->map(fn ($m) => ['role' => $m->direction === 'in' ? 'user' : 'assistant', 'content' => mb_substr((string) $m->body, 0, 1000)])->values()->all();
@@ -149,13 +214,18 @@ class AiReplyService
         if ($r['order'] !== null && static::ordersEnabled($phone)) {
             $id = strtolower($r['order']) === 'mine' ? null : $r['order'];
             $orders = app(OrderLookup::class)->lookup($in->contact_wa_id, $id); // always the sender's own phone
-            if (! $orders) return $this->handoff($phone, $in, 'Order lookup '.($orders === null ? 'failed' : 'not found').': '.$in->body);
+            if (! $orders) {
+                \App\Models\AiOpenQuestion::record($phone->id, $in->contact_wa_id, (string) $in->body, $in->contact_name);
+                if ($inCooldown) return 'handoff_silent';
+                return $this->handoff($phone, $in, 'Order lookup '.($orders === null ? 'failed' : 'not found').': '.$in->body, $s);
+            }
             $this->messaging->send($phone, $in->contact_wa_id, OrderLookup::format($orders), source: 'ai');
             return 'order';
         }
         if ($r['handoff']) {
             \App\Models\AiOpenQuestion::record($phone->id, $in->contact_wa_id, (string) $in->body, $in->contact_name); // teachable in Train AI
-            return $this->handoff($phone, $in, (string) $in->body);
+            if ($inCooldown) return 'handoff_silent';
+            return $this->handoff($phone, $in, (string) $in->body, $s);
         }
         if ($r['image']) {
             $this->messaging->send($phone, $in->contact_wa_id, mb_substr($r['text'], 0, 1000) ?: $r['image']->name, mediaUrl: $r['image']->url, source: 'ai');

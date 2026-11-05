@@ -51,7 +51,9 @@ class AiTrainController extends Controller
         $text = $ai->complete($n, $kb, $d['messages'], AiUsageService::FEATURE_OTHER);
         if ($text === null) return response()->json(['message' => 'AI provider error or timeout. Check the key / model in Settings.'], 502);
         $p = AiReplyService::parse($n, $text);
-        return ['raw' => $text, 'reply' => $p['handoff'] ? AiReplyService::HANDOFF_TEXT : $p['text'], 'handoff' => $p['handoff'],
+        $s = AiReplySetting::where('phone_number_id', $n->id)->first();
+        $lastUser = collect($d['messages'])->where('role', 'user')->last()['content'] ?? '';
+        return ['raw' => $text, 'reply' => $p['handoff'] ? $ai->handoffText($s, (string) $lastUser) : $p['text'], 'handoff' => $p['handoff'],
             'order_lookup' => $p['order'], 'image' => $p['image']];
     }
 

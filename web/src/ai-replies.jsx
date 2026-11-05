@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Sparkles, Check, UserRound, KeyRound, Link2, Cpu, Gauge } from 'lucide-react'
+import { Sparkles, Check, UserRound, KeyRound, Link2, Cpu, Gauge, IndianRupee } from 'lucide-react'
 import { api } from './api'
 import { Button, Card, Field, Badge, Toggle, useToast, useLoad, Empty, Skeleton } from './ui'
 
-const pick = (s) => ({ enabled: !!s.enabled, orders_lookup: !!s.orders_lookup, test_mode: s.test_mode ?? true, allowlist: (s.allowlist || []).join('\n'), knowledge_base: s.knowledge_base || '',
-  max_per_hour: s.max_per_hour ?? 5, handoff_cooldown_hours: s.handoff_cooldown_hours ?? 24 })
+const pick = (s, defaults = {}) => ({ enabled: !!s.enabled, orders_lookup: !!s.orders_lookup, test_mode: s.test_mode ?? true, allowlist: (s.allowlist || []).join('\n'), knowledge_base: s.knowledge_base || '',
+  max_per_hour: s.max_per_hour ?? 5, handoff_cooldown_hours: s.handoff_cooldown_hours ?? 24,
+  handoff_text: s.handoff_text || '', handoff_text_hi: s.handoff_text_hi || '',
+  human_active_quiet_minutes: s.human_active_quiet_minutes ?? defaults.human_active_quiet_minutes ?? 30 })
 
 /** Per-number AI chat replies (admin only). Default OFF, test mode ON. */
 export function AiReplies({ scope = 'admin' }) {
@@ -22,16 +24,16 @@ export function AiReplies({ scope = 'admin' }) {
       {rows.map((r) => <Button key={r.phone_number.id} size="sm" variant={r.phone_number.id === sel ? 'primary' : 'secondary'} onClick={() => setSel(r.phone_number.id)}>
         <Sparkles size={12} /> {r.phone_number.name || r.phone_number.display_number} {r.settings.enabled ? <Badge tone="green">AI on</Badge> : <Badge>AI off</Badge>}</Button>)}
     </div>
-    {row && <AiForm key={row.phone_number.id} P={P} row={row} reload={reload} model={data?.provider?.model} />}
+    {row && <AiForm key={row.phone_number.id} P={P} row={row} reload={reload} model={data?.provider?.model} defaults={data?.defaults || {}} />}
   </div>)
 }
 
-function AiForm({ P, row, reload, model }) {
-  const toast = useToast(); const [f, setF] = useState(pick(row.settings)); const [busy, setBusy] = useState(false)
+function AiForm({ P, row, reload, model, defaults }) {
+  const toast = useToast(); const [f, setF] = useState(pick(row.settings, defaults)); const [busy, setBusy] = useState(false)
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
   const save = async (e) => {
     e.preventDefault(); setBusy(true)
-    const body = { ...f, allowlist: f.allowlist.split(/[\s,;]+/).filter(Boolean), max_per_hour: Number(f.max_per_hour) || 5, handoff_cooldown_hours: Number(f.handoff_cooldown_hours) || 24 }
+    const body = { ...f, allowlist: f.allowlist.split(/[\s,;]+/).filter(Boolean), max_per_hour: Number(f.max_per_hour) || 5, handoff_cooldown_hours: Number(f.handoff_cooldown_hours) || 24, human_active_quiet_minutes: Math.max(0, Number(f.human_active_quiet_minutes) || 0), handoff_text: f.handoff_text || null, handoff_text_hi: f.handoff_text_hi || null }
     try { await api(`${P}/ai-replies/${row.phone_number.id}`, { method: 'PUT', body }); toast.success('AI reply settings saved'); reload() }
     catch (err) { toast.error(err.message) } finally { setBusy(false) }
   }
@@ -48,8 +50,11 @@ function AiForm({ P, row, reload, model }) {
         <Field label="Knowledge base" hint="Products, prices, timings, policies. The AI answers only from this text; anything else is handed to a team member."><textarea rows={7} value={f.knowledge_base} onChange={set('knowledge_base')} placeholder={'Basmati rice 5kg – ₹650\nShop open 9 AM – 8 PM, Mon–Sat\nFree delivery above ₹999 within city'} /></Field>
         <div className="form-2">
           <Field label="Max AI replies per contact / hour"><input type="number" min={1} max={60} value={f.max_per_hour} onChange={set('max_per_hour')} /></Field>
-          <Field label="Handoff pause (hours)" hint="After a handoff the AI stays silent for this contact until staff replies or this time passes"><input type="number" min={1} value={f.handoff_cooldown_hours} onChange={set('handoff_cooldown_hours')} /></Field>
+          <Field label="Handoff cooldown (hours)" hint="During this window after a handoff the AI can still answer known questions from the knowledge base; unknown ones stay silent (no second handoff message). After it ends a new handoff can fire again."><input type="number" min={1} value={f.handoff_cooldown_hours} onChange={set('handoff_cooldown_hours')} /></Field>
+          <Field label="Human-active quiet (minutes)" hint="After a staff/manual reply, keep AI quiet for this many minutes so a human can keep chatting."><input type="number" min={0} max={1440} value={f.human_active_quiet_minutes} onChange={set('human_active_quiet_minutes')} /></Field>
         </div>
+        <Field label="Handoff message (English)" hint={`Sent once when the AI hands off. Leave blank for default: “${defaults?.handoff_text || 'I am connecting you with our team member, please wait 🙏'}”`}><textarea rows={2} value={f.handoff_text} onChange={set('handoff_text')} placeholder={defaults?.handoff_text || 'I am connecting you with our team member, please wait 🙏'} /></Field>
+        <Field label="Handoff message (Hindi / Hinglish)" hint={`Used when the customer wrote in Hindi/Hinglish. Leave blank for default: “${defaults?.handoff_text_hi || 'Main aapko hamare team member se connect kar raha hoon, kripya wait karein 🙏'}”`}><textarea rows={2} value={f.handoff_text_hi} onChange={set('handoff_text_hi')} placeholder={defaults?.handoff_text_hi || 'Main aapko hamare team member se connect kar raha hoon, kripya wait karein 🙏'} /></Field>
         <p className="muted small">Order: automation flows → keyword auto-replies → greeting → AI. One incoming message gets at most one auto-reply. Text messages only, inside the 24h window{model ? ` · model ${model}` : ''}.</p>
         <div className="row"><Button type="submit" variant="primary" icon={Check} loading={busy}>Save AI settings</Button></div>
       </form>

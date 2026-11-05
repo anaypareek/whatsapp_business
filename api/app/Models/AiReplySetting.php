@@ -6,9 +6,20 @@ use Illuminate\Database\Eloquent\Model;
 /** Per-number AI chat reply settings. Off by default; test mode (allowlist only) on by default. */
 class AiReplySetting extends Model
 {
-    protected $fillable = ['phone_number_id', 'enabled', 'test_mode', 'allowlist', 'knowledge_base', 'max_per_hour', 'handoff_cooldown_hours', 'orders_lookup'];
-    protected $casts = ['enabled' => 'boolean', 'test_mode' => 'boolean', 'allowlist' => 'array', 'max_per_hour' => 'integer', 'handoff_cooldown_hours' => 'integer', 'orders_lookup' => 'boolean'];
-    protected $attributes = ['enabled' => false, 'test_mode' => true, 'max_per_hour' => 5, 'handoff_cooldown_hours' => 24];
+    protected $fillable = [
+        'phone_number_id', 'enabled', 'test_mode', 'allowlist', 'knowledge_base',
+        'max_per_hour', 'handoff_cooldown_hours', 'handoff_text', 'handoff_text_hi',
+        'human_active_quiet_minutes', 'orders_lookup',
+    ];
+    protected $casts = [
+        'enabled' => 'boolean', 'test_mode' => 'boolean', 'allowlist' => 'array',
+        'max_per_hour' => 'integer', 'handoff_cooldown_hours' => 'integer',
+        'human_active_quiet_minutes' => 'integer', 'orders_lookup' => 'boolean',
+    ];
+    protected $attributes = [
+        'enabled' => false, 'test_mode' => true, 'max_per_hour' => 5,
+        'handoff_cooldown_hours' => 24, 'human_active_quiet_minutes' => 30,
+    ];
 
     public function allows(string $waId): bool
     {

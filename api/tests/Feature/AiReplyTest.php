@@ -175,27 +175,90 @@ class AiReplyTest extends TestCase
 
     public function test_handoff_flags_conversation_and_pauses_until_human_or_cooldown(): void
     {
-        $this->enable(['handoff_cooldown_hours' => 24]);
+        $this->enable(['handoff_cooldown_hours' => 24, 'human_active_quiet_minutes' => 0]);
         $this->aiAnswer = '[HANDOFF]';
         $this->text('Do you deliver to Pune tomorrow?')->assertJsonPath('ai', 1);
         $this->assertSame([\App\Services\AiReplyService::HANDOFF_TEXT], $this->sent());
         $this->assertTrue(AiContactState::first()->needs_human);
         $this->admin()->getJson('/api/conversations')->assertJsonPath('0.needs_human', true);
         $this->admin()->getJson('/api/ai-replies')->assertJsonPath('numbers.0.handoffs.0.contact_wa_id', self::FROM);
-        $this->aiAnswer = 'Hello! 😊';
-        $this->text('hello?')->assertJsonPath('ai', 0); // paused
-        $this->assertCount(1, $this->sent());
-        // staff replies manually -> flag cleared, AI resumes
+        // smart continue: known answer during cooldown is sent; needs_human stays
+        $this->aiAnswer = 'Our number is +91 90909 00894 😊';
+        $this->text('Number do')->assertJsonPath('ai', 1);
+        $this->assertSame([\App\Services\AiReplyService::HANDOFF_TEXT, 'Our number is +91 90909 00894 😊'], $this->sent());
+        $this->assertTrue(AiContactState::first()->needs_human);
+        // unknown follow-up during cooldown: silent, no second handoff text
+        $before = count($this->sent());
+        $this->aiAnswer = '[HANDOFF]';
+        $this->text('price of gold?')->assertJsonPath('ai', 1);
+        $this->assertCount($before, $this->sent());
+        $this->assertTrue(\App\Models\AiOpenQuestion::where('question', 'price of gold?')->where('status', 'open')->exists());
+        // staff replies manually -> flag cleared, AI resumes (quiet minutes = 0)
         app(\App\Services\MessagingService::class)->send($this->n, self::FROM, 'Yes we do, Rs 50', source: 'manual');
         $this->assertFalse(AiContactState::first()->needs_human);
         $this->admin()->getJson('/api/conversations')->assertJsonPath('0.needs_human', false);
+        $this->aiAnswer = 'Hello! 😊';
         $this->text('great thanks')->assertJsonPath('ai', 1);
-        // cooldown passes without human reply
+        // after a fresh handoff, cooldown must expire before another handoff message is sent
         $this->aiAnswer = '[HANDOFF]';
         $this->text('discount?');
-        $this->text('hello??')->assertJsonPath('ai', 0);
+        $this->assertTrue(AiContactState::first()->needs_human);
+        $handoffs = count(array_filter($this->sent(), fn ($b) => $b === \App\Services\AiReplyService::HANDOFF_TEXT));
+        $this->assertSame(2, $handoffs);
+        $this->text('still?')->assertJsonPath('ai', 1); // silent re-handoff
+        $this->assertSame(2, count(array_filter($this->sent(), fn ($b) => $b === \App\Services\AiReplyService::HANDOFF_TEXT)));
         Carbon::setTestNow(now()->addHours(25));
-        $this->text('anyone?')->assertJsonPath('ai', 1);
+        $this->text('anyone?')->assertJsonPath('ai', 1); // cooldown over → new handoff message
+        $this->assertSame(3, count(array_filter($this->sent(), fn ($b) => $b === \App\Services\AiReplyService::HANDOFF_TEXT)));
+    }
+
+    public function test_handoff_sends_connecting_text_and_one_push(): void
+    {
+        $this->enable(['human_active_quiet_minutes' => 0]);
+        \App\Models\DeviceToken::create(['client_id' => $this->c->id, 'token' => 'tok-'.str_repeat('a', 20), 'platform' => 'android']);
+        \App\Models\UserDeviceToken::create(['user_id' => $this->admin->id, 'token' => 'staff-'.str_repeat('b', 20)]);
+        $fcm = \Mockery::mock(\App\Services\FcmService::class)->makePartial();
+        $fcm->shouldReceive('sendToClient')->once()->withArgs(fn ($cid, $title, $body, $data) => $cid === $this->c->id
+            && str_starts_with($title, 'Needs human:')
+            && $data['type'] === 'needs_human'
+            && $data['contact'] === self::FROM)->andReturn(['sent' => 1]);
+        $fcm->shouldReceive('sendToStaff')->once()->withArgs(fn ($title, $body, $data) => $data['type'] === 'needs_human')->andReturn(['sent' => 1]);
+        $this->app->instance(\App\Services\FcmService::class, $fcm);
+        $this->aiAnswer = '[HANDOFF]';
+        $this->text('Do you deliver to Pune?')->assertJsonPath('ai', 1);
+        $this->assertSame([\App\Services\AiReplyService::HANDOFF_TEXT], $this->sent());
+        // second unknown question: no second push, no second connecting text
+        $this->text('and discount?')->assertJsonPath('ai', 1);
+        $this->assertSame([\App\Services\AiReplyService::HANDOFF_TEXT], $this->sent());
+    }
+
+    public function test_handoff_uses_hindi_text_and_custom_override(): void
+    {
+        $this->enable([
+            'human_active_quiet_minutes' => 0,
+            'handoff_text' => 'Connecting you now, please wait.',
+            'handoff_text_hi' => 'Team se connect kar rahe hain, wait karein 🙏',
+        ]);
+        $this->aiAnswer = '[HANDOFF]';
+        $this->text('Number do')->assertJsonPath('ai', 1); // hinglish → hi text
+        $this->assertSame(['Team se connect kar rahe hain, wait karein 🙏'], $this->sent());
+        AiContactState::query()->update(['needs_human' => false]);
+        Carbon::setTestNow(now()->addHours(25));
+        $this->text('Do you deliver tomorrow?')->assertJsonPath('ai', 1);
+        $this->assertSame(['Team se connect kar rahe hain, wait karein 🙏', 'Connecting you now, please wait.'], $this->sent());
+    }
+
+    public function test_human_active_keeps_ai_quiet(): void
+    {
+        $this->enable(['human_active_quiet_minutes' => 30]);
+        $this->aiAnswer = 'Hi! 😊';
+        $this->text('hello')->assertJsonPath('ai', 1);
+        app(\App\Services\MessagingService::class)->send($this->n, self::FROM, 'Staff here', source: 'manual');
+        $this->text('are you there?')->assertJsonPath('ai', 0);
+        $this->assertSame(1, Message::where('source', 'ai')->count());
+        Carbon::setTestNow(now()->addMinutes(31));
+        $this->text('hello again')->assertJsonPath('ai', 1);
+        $this->assertSame(2, Message::where('source', 'ai')->count());
     }
 
     public function test_provider_failure_is_graceful_and_key_never_exposed(): void
