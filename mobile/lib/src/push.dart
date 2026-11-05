@@ -24,6 +24,7 @@ class PushService {
   String? reason;
   String? _token;
   StreamSubscription? _refreshSub, _msgSub, _openSub;
+  bool _launchHandled = false;
 
   /// Called with (phoneNumberId, contact) when the user taps a notification.
   void Function(int pn, String contact)? onOpenThread;
@@ -119,6 +120,9 @@ class PushService {
     await _local.initialize(
       settings: const InitializationSettings(android: AndroidInitializationSettings('@drawable/ic_notification')),
       onDidReceiveNotificationResponse: (r) => _openFromData(_decode(r.payload)),
+      // Taps on a plain notification always come through onDidReceiveNotificationResponse (the app is brought to
+      // the front); the background callback only fires for action buttons, which we don't use, so it's a no-op.
+      onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
     );
     final android = _local.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
     await android?.createNotificationChannel(const AndroidNotificationChannel(channelId, 'Chat messages',
@@ -127,10 +131,17 @@ class PushService {
     FirebaseMessaging.onBackgroundMessage(firebaseBackgroundHandler);
     _msgSub ??= FirebaseMessaging.onMessage.listen(_onForeground);
     _openSub ??= FirebaseMessaging.onMessageOpenedApp.listen((m) => _openFromData(m.data));
+    // Cold start from a tap: FCM tray notification (getInitialMessage) or our local one (launch details).
+    // main.dart queues the open until the navigator and session are ready.
+    if (_launchHandled) return; // init() can re-run on register retries; handle the launch tap only once
+    _launchHandled = true;
     final initial = await FirebaseMessaging.instance.getInitialMessage();
-    if (initial != null) Future.delayed(const Duration(milliseconds: 600), () => _openFromData(initial.data));
-    final launch = await _local.getNotificationAppLaunchDetails();
-    if (launch?.didNotificationLaunchApp == true) _openFromData(_decode(launch!.notificationResponse?.payload));
+    if (initial != null) {
+      _openFromData(initial.data);
+    } else {
+      final launch = await _local.getNotificationAppLaunchDetails();
+      if (launch?.didNotificationLaunchApp == true) _openFromData(_decode(launch!.notificationResponse?.payload));
+    }
   }
 
   /// After login (and on each start while logged in): ask permission, register this device.
@@ -280,3 +291,7 @@ Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
   final o = await PushService.cachedOptions();
   if (o != null) await PushService.ensureFirebase(o);
 }
+
+/// Required top-level entry point for flutter_local_notifications background responses (action buttons only).
+@pragma('vm:entry-point')
+void notificationTapBackground(NotificationResponse response) {}

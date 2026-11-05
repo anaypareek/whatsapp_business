@@ -149,9 +149,11 @@ class FcmService
                 'token' => $t->token,
                 'notification' => ['title' => mb_substr($title, 0, 100), 'body' => mb_substr($body, 0, 240)],
                 'data' => $data,
+                // No click_action: the tap then launches the app's launcher activity, which works on every installed build
+                // (builds <= 1.0.10 had no FLUTTER_NOTIFICATION_CLICK intent filter, so a tap did nothing).
                 'android' => array_filter([
                     'priority' => 'HIGH', 'collapse_key' => $collapseKey, 'ttl' => '86400s',
-                    'notification' => array_filter(['channel_id' => 'chat_messages', 'tag' => $collapseKey, 'click_action' => 'FLUTTER_NOTIFICATION_CLICK', 'notification_priority' => 'PRIORITY_HIGH']),
+                    'notification' => array_filter(['channel_id' => 'chat_messages', 'tag' => $collapseKey, 'notification_priority' => 'PRIORITY_HIGH']),
                 ]),
             ]];
             $res = Http::withToken($access)->timeout(10)->post($url, $msg);

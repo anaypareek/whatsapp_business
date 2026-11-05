@@ -123,6 +123,7 @@ class _WaAppState extends State<WaApp> {
   Future<void> _onLoggedIn() async {
     // The login itself already succeeded; post-login setup problems must not surface as a failed sign-in.
     try { s.store.clear(); _startSession(); } catch (e) { debugPrint('post-login start failed: $e'); }
+    if (_pendingOpen != null) _flushPendingOpen(); // tapped a notification while signed out
     await _registerPush(report: true);
     final w = s.session.storageWarning;
     if (w != null) await _showSnack(w, seconds: 8);
@@ -135,12 +136,36 @@ class _WaAppState extends State<WaApp> {
     _nav.currentState?.popUntil((r) => r.isFirst);
   }
 
+  /// A notification tap can arrive before the navigator exists or before the session is restored (cold start):
+  /// keep it pending and retry until both are ready (up to ~15s), then open the thread.
+  (int, String)? _pendingOpen;
+  bool _openRetrying = false;
+
   void _openThread(int pn, String contact) {
-    final nav = _nav.currentState;
-    if (nav == null || !s.session.loggedIn) return;
-    if (s.store.openKey == convKey(pn, contact)) { s.poller.kick(); return; }
-    nav.popUntil((r) => r.isFirst);
-    nav.push(MaterialPageRoute(builder: (_) => ThreadScreen(s: s, phoneNumberId: pn, contact: contact)));
+    _pendingOpen = (pn, contact);
+    _flushPendingOpen();
+  }
+
+  Future<void> _flushPendingOpen() async {
+    if (_openRetrying) return;
+    _openRetrying = true;
+    try {
+      for (var i = 0; i < 75 && _pendingOpen != null && mounted; i++) {
+        final nav = _nav.currentState;
+        if (nav != null && s.session.ready && s.session.loggedIn) {
+          final (pn, contact) = _pendingOpen!;
+          _pendingOpen = null;
+          if (s.store.openKey == convKey(pn, contact)) { s.poller.kick(); return; }
+          nav.popUntil((r) => r.isFirst);
+          nav.push(MaterialPageRoute(builder: (_) => ThreadScreen(s: s, phoneNumberId: pn, contact: contact)));
+          return;
+        }
+        if (s.session.ready && !s.session.loggedIn) return; // keep it pending; _onLoggedIn flushes it
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      }
+    } finally {
+      _openRetrying = false;
+    }
   }
 
   @override
