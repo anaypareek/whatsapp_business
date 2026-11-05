@@ -17,7 +17,7 @@ class Message extends Model
             if ($client) \App\Http\Controllers\Api\ClientChatController::bust($client);
             \App\Http\Controllers\Api\ClientChatController::bust('admin'); // Master app (all numbers)
         });
-        // a person replied: clear the AI human-handoff flag so the AI may answer again later
+        // a person replied: clear needs_human so AI may answer again later — never clears taken_over (manual takeover stays until "Give to AI")
         static::created(function (Message $m) {
             if ($m->direction !== 'out' || $m->is_auto || ! $m->phone_number_id || in_array($m->source, \App\Services\MessagingService::AUTO_SOURCES, true)) return;
             AiContactState::where('phone_number_id', $m->phone_number_id)->where('contact_wa_id', $m->contact_wa_id)->where('needs_human', true)->update(['needs_human' => false]);

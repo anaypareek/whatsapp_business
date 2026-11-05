@@ -184,6 +184,14 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
               if (m != null && !m.incoming) Padding(padding: const EdgeInsets.only(right: 4), child: StatusTicks(m.status, size: 16)),
               Expanded(child: Text(m?.preview ?? '', maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: c.unread > 0 ? Brand.text : Brand.muted, fontWeight: c.unread > 0 ? FontWeight.w500 : FontWeight.w400))),
+              if (c.takenOver) Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(color: const Color(0xFF0F766E), borderRadius: BorderRadius.circular(10)),
+                  child: const Text('Human', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                ),
+              ),
               if (c.unread > 0) Padding(padding: const EdgeInsets.only(left: 8), child: UnreadBadge(c.unread)),
             ]),
             if (num != null) Padding(padding: const EdgeInsets.only(top: 3),

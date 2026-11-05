@@ -19,6 +19,8 @@ use Throwable;
  * Handoff: first unanswered question sends a fixed connecting message + one FCM push and sets needs_human.
  * During handoff_cooldown_hours the AI may still answer known questions from KB; a second handoff stays silent
  * (records Unanswered, no re-push). Human outbound in the last human_active_quiet_minutes keeps AI quiet.
+ * Manual takeover (taken_over): AI is fully silent including trained answers; WebhookProcessor also skips
+ * keyword/greeting/flow/button auto-replies for that chat until "Give to AI" releases it.
  */
 class AiReplyService
 {
@@ -49,6 +51,8 @@ class AiReplyService
     {
         $s = AiReplySetting::where('phone_number_id', $phone->id)->first();
         if (! $s || ! $s->enabled) return 'disabled';
+        // manual takeover: AI fully silent (trained answers included); WebhookProcessor also skips keywords/greeting/flows/buttons
+        if (AiContactState::isTakenOver((int) $phone->id, (string) $in->contact_wa_id)) return 'taken_over';
         if ($in->direction !== 'in' || $in->is_auto || $in->type !== 'text' || trim((string) $in->body) === '') return 'not_text';
         $from = preg_replace('/\D/', '', (string) $in->contact_wa_id);
         // loop prevention: never answer our own / another business number

@@ -3,7 +3,7 @@ import { EmojiButton, editAt, RichText } from './editor-tools'
 import { InstagramSettings } from './instagram-settings'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Users as UsersIcon, UserPlus, Trash2, Phone, Plus, RefreshCw, Pencil, ShieldCheck, Send, Paperclip, X, FileText, Image as ImageIcon, Search,
-  MessageSquarePlus, Check, CheckCheck, Clock, AlertCircle, Bot, Settings as SettingsIcon, KeyRound, Copy, Webhook, Lock, Hash, Building2, MessageCircle, Smile, Zap, Eye, EyeOff, Info, Bell } from 'lucide-react'
+  MessageSquarePlus, Check, CheckCheck, Clock, AlertCircle, Bot, Settings as SettingsIcon, KeyRound, Copy, Webhook, Lock, Hash, Building2, MessageCircle, Smile, Zap, Eye, EyeOff, Info, Bell, UserRound, BotOff } from 'lucide-react'
 import { api, fmtTime, fmtShort } from './api'
 import { Button, Card, PageHeader, Field, TableSkeleton, Empty, Badge, Toggle, useToast, useLoad, Modal, Avatar, Skeleton } from './ui'
 import { TemplateSender } from './templates'
@@ -220,17 +220,30 @@ function Bubble({ m }) {
   </div></div>)
 }
 
-const ADMIN_EP = { numbers: '/phone-numbers', conversations: '/conversations', thread: '/messages/thread', poll: '/messages/poll', send: '/messages/send' }
+const ADMIN_EP = { numbers: '/phone-numbers', conversations: '/conversations', thread: '/messages/thread', poll: '/messages/poll', send: '/messages/send', takeover: '/conversations/takeover', release: '/conversations/release' }
 export function Chat({ ep = ADMIN_EP }) {
   const [numbers] = useLoad(ep.numbers)
   const [filter, setFilter] = useState('')
   const [convs, setConvs] = useState(null); const [sel, setSel] = useState(null); const [msgs, setMsgs] = useState(null)
-  const [search, setSearch] = useState(''); const [newTo, setNewTo] = useState(''); const [showNew, setShowNew] = useState(false)
+  const [search, setSearch] = useState(''); const [newTo, setNewTo] = useState(''); const [showNew, setShowNew] = useState(false); const [takeBusy, setTakeBusy] = useState(false)
+  const toast = useToast()
   const lastSeen = useRef({ id: 0, upd: null }); const msgsRef = useRef()
   const numName = (id) => { const n = numbers.find((x) => x.id === id); return n ? (n.name || n.display_number) : '—' }
 
-  const loadConvs = useCallback(() => api(`${ep.conversations}${filter ? `?phone_number_id=${filter}` : ''}`).then(setConvs).catch(() => {}), [filter])
-  const loadThread = useCallback(() => { if (sel) api(`${ep.thread}?phone_number_id=${sel.phone_number_id}&contact=${encodeURIComponent(sel.contact_wa_id)}`).then(setMsgs).catch(() => {}) }, [sel])
+  const loadConvs = useCallback(() => api(`${ep.conversations}${filter ? `?phone_number_id=${filter}` : ''}`).then((rows) => {
+    setConvs(rows)
+    setSel((s) => {
+      if (!s) return s
+      const m = (rows || []).find((c) => c.phone_number_id === s.phone_number_id && c.contact_wa_id === s.contact_wa_id)
+      return m ? { ...s, taken_over: !!m.taken_over, needs_human: !!m.needs_human, contact_name: m.contact_name || s.contact_name } : s
+    })
+  }).catch(() => {}), [filter, ep.conversations])
+  const loadThread = useCallback(() => {
+    if (!sel) return
+    const { phone_number_id: pn, contact_wa_id: contact } = sel
+    api(`${ep.thread}?phone_number_id=${pn}&contact=${encodeURIComponent(contact)}`)
+      .then((r) => setMsgs(Array.isArray(r) ? r : (r?.messages || []))).catch(() => {})
+  }, [sel?.phone_number_id, sel?.contact_wa_id, ep.thread])
   useEffect(() => { loadConvs() }, [loadConvs])
   useEffect(() => { setMsgs(null); loadThread() }, [loadThread])
   useEffect(() => { const el = msgsRef.current; if (el) el.scrollTop = el.scrollHeight }, [msgs?.length])
@@ -246,7 +259,19 @@ export function Chat({ ep = ADMIN_EP }) {
 
   const shown = (convs || []).filter((c) => !search || c.contact_wa_id.includes(search) || (c.contact_name || '').toLowerCase().includes(search.toLowerCase()))
   const startNew = (e) => { e.preventDefault(); const nid = Number(filter) || numbers[0]?.id; if (!nid || !newTo) return; setSel({ phone_number_id: nid, contact_wa_id: newTo.replace(/\D/g, '') }); setNewTo(''); setShowNew(false) }
-  const title = sel ? (sel.contact_name || convs?.find((c) => c.contact_wa_id === sel.contact_wa_id)?.contact_name || `+${sel.contact_wa_id}`) : ''
+  const live = sel && (convs || []).find((c) => c.phone_number_id === sel.phone_number_id && c.contact_wa_id === sel.contact_wa_id)
+  const taken = !!(sel && (sel.taken_over ?? live?.taken_over))
+  const title = sel ? (sel.contact_name || live?.contact_name || `+${sel.contact_wa_id}`) : ''
+  const setTakeover = async (on) => {
+    if (!sel || !ep.takeover) return
+    setTakeBusy(true)
+    try {
+      const r = await api(on ? ep.takeover : ep.release, { method: 'POST', body: { phone_number_id: sel.phone_number_id, contact: sel.contact_wa_id } })
+      setSel((s) => s ? { ...s, taken_over: !!r.taken_over, needs_human: !!r.needs_human } : s)
+      toast.success(on ? 'You are handling this chat — AI and auto-replies paused' : 'Chat given back to AI')
+      loadConvs(); loadThread()
+    } catch (e) { toast.error(e.message) } finally { setTakeBusy(false) }
+  }
 
   return (<div className={`chat ${sel ? 'has-sel' : ''}`}>
     <aside className="chat-list">
@@ -265,7 +290,7 @@ export function Chat({ ep = ADMIN_EP }) {
               <Avatar name={c.contact_name || c.contact_wa_id} size={46} />
               <div className="grow"><div className="row between"><b className="ellipsis">{c.contact_name || `+${c.contact_wa_id}`}</b><small className={c.unread ? 'hot' : 'muted'}>{fmtShort(c.last_message?.created_at)}</small></div>
                 <div className="row between"><span className="muted ellipsis">{c.last_message?.direction === 'out' && <span className={`tick ${c.last_message.status}`}>{TICK[c.last_message.status]}</span>}{c.last_message?.body || `[${c.last_message?.type}]`}</span>
-                  {c.needs_human && <em className="pill human" title="AI handed this chat to a team member">needs human</em>}{c.unread > 0 && <em className="pill">{c.unread}</em>}</div>
+                  {c.taken_over ? <em className="pill takeover" title="A team member took over — AI silent">Human handling</em> : c.needs_human && <em className="pill human" title="AI handed this chat to a team member">needs human</em>}{c.unread > 0 && <em className="pill">{c.unread}</em>}</div>
                 <small className="via">via {numName(c.phone_number_id)}</small></div>
             </div>)
           })}
@@ -275,7 +300,12 @@ export function Chat({ ep = ADMIN_EP }) {
     <section className="thread">
       {sel ? (<>
         <header className="thread-head"><button className="icon-btn back" onClick={() => setSel(null)}>←</button><Avatar name={title} size={40} />
-          <div className="grow"><b>{title}</b><small className="muted">+{sel.contact_wa_id} · via {numName(sel.phone_number_id)}</small></div></header>
+          <div className="grow"><b>{title}</b><small className="muted">+{sel.contact_wa_id} · via {numName(sel.phone_number_id)}</small>
+            {taken && <em className="pill takeover head-badge" title="AI and all auto-replies are paused for this chat">Human handling</em>}</div>
+          {ep.takeover && (taken
+            ? <Button size="sm" variant="primary" disabled={takeBusy} onClick={() => setTakeover(false)} title="Resume AI and auto-replies for this chat"><Bot size={14} /> Give to AI</Button>
+            : <Button size="sm" variant="secondary" disabled={takeBusy} onClick={() => setTakeover(true)} title="Stop AI and all auto-replies for this chat"><UserRound size={14} /> Take over</Button>)}
+          </header>
         <div className="msgs" ref={msgsRef}>{msgs === null ? <div className="center-pad"><Skeleton w="40%" h={36} /><Skeleton w="55%" h={36} style={{ alignSelf: 'flex-end' }} /></div>
           : msgs.map((m) => <Bubble key={m.id} m={m} />)}</div>
         <Composer compact sendPath={ep.send} numbers={numbers} fixedNumber={sel.phone_number_id} fixedTo={sel.contact_wa_id} onSent={() => { loadThread(); loadConvs() }} />

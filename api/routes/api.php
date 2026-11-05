@@ -50,6 +50,8 @@ Route::middleware(['auth:sanctum', EnsureClient::class])->prefix('client')->grou
     Route::middleware('throttle:chat')->group(function () {
         Route::get('/chat/conversations', [Api\ClientChatController::class, 'conversations']);
         Route::get('/chat/thread', [Api\ClientChatController::class, 'thread']);
+        Route::post('/chat/takeover', [Api\ClientChatController::class, 'takeover']);
+        Route::post('/chat/release', [Api\ClientChatController::class, 'release']);
         Route::post('/chat/read', [Api\ClientChatController::class, 'read']);
         Route::get('/chat/media/{message}', [Api\ClientChatController::class, 'media'])->whereNumber('message');
         Route::post('/chat/send', [Api\ClientPortalController::class, 'send']);
@@ -84,6 +86,8 @@ Route::middleware(['auth:sanctum', EnsureClient::class])->prefix('client')->grou
     Route::get('/templates/{template}/test', [Api\TemplateController::class, 'testPreview']);
     Route::post('/templates/{template}/test', [Api\TemplateController::class, 'testSend'])->middleware('throttle:20,1');
     Route::get('/conversations', [Api\ClientPortalController::class, 'conversations']);
+    Route::post('/conversations/takeover', [Api\ClientPortalController::class, 'takeover']);
+    Route::post('/conversations/release', [Api\ClientPortalController::class, 'release']);
     Route::get('/messages/thread', [Api\ClientPortalController::class, 'thread']);
     Route::get('/messages/poll', [Api\ClientPortalController::class, 'poll']);
     Route::post('/messages/send', [Api\ClientPortalController::class, 'send']);
@@ -149,6 +153,8 @@ Route::middleware(['auth:sanctum', EnsureStaff::class])->group(function () {
     Route::post('/messages/send-template', [Api\MessageController::class, 'sendTemplate']);
     Route::post('/messages/send', [Api\MessageController::class, 'send']);
     Route::get('/conversations', [Api\MessageController::class, 'conversations']);
+    Route::post('/conversations/takeover', [Api\MessageController::class, 'takeover']);
+    Route::post('/conversations/release', [Api\MessageController::class, 'release']);
     Route::get('/messages/thread', [Api\MessageController::class, 'thread']);
     Route::get('/messages/poll', [Api\MessageController::class, 'poll']);
 
@@ -198,6 +204,8 @@ Route::middleware(['auth:sanctum', EnsureStaff::class])->group(function () {
         Route::middleware('throttle:chat')->group(function () {
             Route::get('/chat/conversations', [Api\AdminChatController::class, 'conversations']);
             Route::get('/chat/thread', [Api\AdminChatController::class, 'thread']);
+            Route::post('/chat/takeover', [Api\AdminChatController::class, 'takeover']);
+            Route::post('/chat/release', [Api\AdminChatController::class, 'release']);
             Route::post('/chat/read', [Api\AdminChatController::class, 'read']);
             Route::get('/chat/media/{message}', [Api\AdminChatController::class, 'media'])->whereNumber('message');
             Route::post('/devices', [Api\AdminChatController::class, 'registerDevice']);

@@ -64,10 +64,13 @@ class Msg {
 
 class Conversation {
   final int phoneNumberId; final String contact; String? contactName; int unread; Msg? last;
-  Conversation({required this.phoneNumberId, required this.contact, this.contactName, this.unread = 0, this.last});
+  bool takenOver; bool needsHuman;
+  Conversation({required this.phoneNumberId, required this.contact, this.contactName, this.unread = 0, this.last, this.takenOver = false, this.needsHuman = false});
   factory Conversation.fromJson(Map<String, dynamic> j) => Conversation(
       phoneNumberId: _int(j['phone_number_id']), contact: '${j['contact_wa_id'] ?? ''}', contactName: j['contact_name'] as String?,
-      unread: _int(j['unread']), last: j['last_message'] is Map ? Msg.fromJson(Map<String, dynamic>.from(j['last_message'])) : null);
+      unread: _int(j['unread']), last: j['last_message'] is Map ? Msg.fromJson(Map<String, dynamic>.from(j['last_message'])) : null,
+      takenOver: j['taken_over'] == true || j['taken_over'] == 1,
+      needsHuman: j['needs_human'] == true || j['needs_human'] == 1);
   String get key => convKey(phoneNumberId, contact);
   String get title => (contactName != null && contactName!.trim().isNotEmpty) ? contactName!.trim() : '+$contact';
   DateTime get time => last?.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);

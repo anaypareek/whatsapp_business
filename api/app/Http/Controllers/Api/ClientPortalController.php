@@ -2,6 +2,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AiContactState;
 use App\Models\Client;
 use App\Models\Message;
 use App\Models\MessageTemplate;
@@ -157,11 +158,14 @@ class ClientPortalController extends Controller
             ->select('phone_number_id', 'contact_wa_id', DB::raw('MAX(id) as last_id'), DB::raw("SUM(CASE WHEN direction='in' AND read_at IS NULL THEN 1 ELSE 0 END) as unread"))
             ->groupBy('phone_number_id', 'contact_wa_id')->get();
         $last = Message::whereIn('id', $rows->pluck('last_id'))->get()->keyBy('id');
-        $flag = \App\Models\AiContactState::flagged();
+        $flag = AiContactState::flagged();
+        $taken = AiContactState::takenOverMap();
         $names = Message::whereIn('contact_wa_id', $rows->pluck('contact_wa_id'))->whereNotNull('contact_name')->orderByDesc('id')
             ->get(['contact_wa_id', 'contact_name'])->unique('contact_wa_id')->pluck('contact_name', 'contact_wa_id');
         return $rows->map(fn ($row) => ['phone_number_id' => $row->phone_number_id, 'contact_wa_id' => $row->contact_wa_id,
-            'contact_name' => $names[$row->contact_wa_id] ?? null, 'unread' => (int) $row->unread, 'last_message' => $last[$row->last_id] ?? null, 'needs_human' => isset($flag[$row->phone_number_id.'-'.$row->contact_wa_id])])
+            'contact_name' => $names[$row->contact_wa_id] ?? null, 'unread' => (int) $row->unread, 'last_message' => $last[$row->last_id] ?? null,
+            'needs_human' => isset($flag[$row->phone_number_id.'-'.$row->contact_wa_id]),
+            'taken_over' => isset($taken[$row->phone_number_id.'-'.$row->contact_wa_id])])
             ->sortByDesc(fn ($c) => $c['last_message']?->id)->values();
     }
 
@@ -172,7 +176,11 @@ class ClientPortalController extends Controller
         $q = Message::where('phone_number_id', $n->id)->where('contact_wa_id', $d['contact']);
         $msgs = (clone $q)->orderBy('id')->limit(500)->get();
         (clone $q)->where('direction', 'in')->whereNull('read_at')->update(['read_at' => now()]);
-        return $msgs;
+        return [
+            'messages' => $msgs,
+            'taken_over' => AiContactState::isTakenOver((int) $n->id, $d['contact']),
+            'needs_human' => (bool) AiContactState::where('phone_number_id', $n->id)->where('contact_wa_id', $d['contact'])->value('needs_human'),
+        ];
     }
 
     public function poll(Request $r)
@@ -190,5 +198,23 @@ class ClientPortalController extends Controller
         ]);
         $msg = $svc->send($this->ownNumber($r, $d['phone_number_id']), $d['to'], $d['text'] ?? null, $r->file('file'), null, 'client');
         return response()->json($msg, $msg->status === 'failed' ? 502 : 201);
+    }
+
+    /** Manual takeover for a chat on one of the client's own numbers. */
+    public function takeover(Request $r)
+    {
+        $d = $r->validate(['phone_number_id' => 'required|integer', 'contact' => 'required|string|max:32']);
+        $n = $this->ownNumber($r, $d['phone_number_id']);
+        $st = AiContactState::takeOver((int) $n->id, $d['contact'], $r->user());
+        return $st->toChatMeta() + ['phone_number_id' => (int) $n->id, 'contact_wa_id' => $d['contact']];
+    }
+
+    /** Give chat back to AI (own numbers only). */
+    public function release(Request $r)
+    {
+        $d = $r->validate(['phone_number_id' => 'required|integer', 'contact' => 'required|string|max:32']);
+        $n = $this->ownNumber($r, $d['phone_number_id']);
+        $st = AiContactState::release((int) $n->id, $d['contact']);
+        return $st->toChatMeta() + ['phone_number_id' => (int) $n->id, 'contact_wa_id' => $d['contact']];
     }
 }

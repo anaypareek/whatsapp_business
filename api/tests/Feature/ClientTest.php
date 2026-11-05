@@ -104,7 +104,7 @@ class ClientTest extends TestCase
         $h()->getJson('/api/client/numbers')->assertJsonCount(1)->assertJsonPath('0.phone_number_id', '100');
         $h()->getJson('/api/client/conversations')->assertJsonCount(1)->assertJsonPath('0.contact_wa_id', '9101');
         $h()->getJson('/api/client/dashboard')->assertJsonPath('numbers', 1)->assertJsonPath('total_received', 1)->assertJsonPath('unread', 1);
-        $h()->getJson("/api/client/messages/thread?phone_number_id={$mine->id}&contact=9101")->assertJsonCount(1);
+        $h()->getJson("/api/client/messages/thread?phone_number_id={$mine->id}&contact=9101")->assertJsonCount(1, 'messages')->assertJsonPath('taken_over', false);
         $h()->getJson("/api/client/messages/thread?phone_number_id={$other->id}&contact=9202")->assertNotFound();
         $h()->postJson('/api/client/messages/send', ['phone_number_id' => $mine->id, 'to' => '9101000000', 'text' => 'Hello'])->assertCreated()->assertJsonPath('source', 'client');
         Http::assertSent(fn (HttpRequest $r) => str_contains($r->url(), '/100/messages'));

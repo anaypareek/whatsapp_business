@@ -3,6 +3,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\DeviceToken;
+use App\Models\AiContactState;
 use App\Models\Message;
 use App\Models\PhoneNumber;
 use App\Services\FcmService;
@@ -108,7 +109,13 @@ class ClientChatController extends Controller
         $page = (clone $q)->when($d['before_id'] ?? null, fn ($x, $b) => $x->where('id', '<', $b))->orderByDesc('id')->limit($limit + 1)->get();
         $more = $page->count() > $limit;
         if (empty($d['before_id'])) $this->markRead($r, (int) $d['phone_number_id'], $d['contact']);
-        return ['messages' => $page->take($limit)->reverse()->values(), 'has_more' => $more, 'cursor' => static::version($this->scopeKey($r), $this->numberIds($r))];
+        return [
+            'messages' => $page->take($limit)->reverse()->values(),
+            'has_more' => $more,
+            'cursor' => static::version($this->scopeKey($r), $this->numberIds($r)),
+            'taken_over' => AiContactState::isTakenOver((int) $d['phone_number_id'], $d['contact']),
+            'needs_human' => (bool) AiContactState::where('phone_number_id', $d['phone_number_id'])->where('contact_wa_id', $d['contact'])->value('needs_human'),
+        ];
     }
 
     /** POST /client/chat/read {phone_number_id, contact} — while a thread is open and new messages arrive. */
@@ -167,6 +174,27 @@ class ClientChatController extends Controller
             'push' => $push])->header('Cache-Control', 'public, max-age=300');
     }
 
+
+    /** POST /chat/takeover {phone_number_id, contact} — silence all auto-replies for this chat. */
+    public function takeover(Request $r)
+    {
+        $d = $r->validate(['phone_number_id' => 'required|integer', 'contact' => 'required|string|max:32']);
+        abort_unless(in_array((int) $d['phone_number_id'], $this->numberIds($r), true), 404, 'Conversation not found');
+        $st = AiContactState::takeOver((int) $d['phone_number_id'], $d['contact'], $r->user());
+        self::bust($this->scopeKey($r));
+        return $st->toChatMeta() + ['phone_number_id' => (int) $d['phone_number_id'], 'contact_wa_id' => $d['contact']];
+    }
+
+    /** POST /chat/release {phone_number_id, contact} — Give to AI. */
+    public function release(Request $r)
+    {
+        $d = $r->validate(['phone_number_id' => 'required|integer', 'contact' => 'required|string|max:32']);
+        abort_unless(in_array((int) $d['phone_number_id'], $this->numberIds($r), true), 404, 'Conversation not found');
+        $st = AiContactState::release((int) $d['phone_number_id'], $d['contact']);
+        self::bust($this->scopeKey($r));
+        return $st->toChatMeta() + ['phone_number_id' => (int) $d['phone_number_id'], 'contact_wa_id' => $d['contact']];
+    }
+
     // ---- helpers ----
     protected function markRead(Request $r, int $pn, string $contact): int
     {
@@ -195,7 +223,12 @@ class ClientChatController extends Controller
         $last = Message::whereIn('id', $rows->pluck('last_id'))->get()->keyBy('id');
         $names = Message::whereIn('phone_number_id', $ids)->whereIn('contact_wa_id', $rows->pluck('contact_wa_id')->unique())->whereNotNull('contact_name')
             ->orderByDesc('id')->get(['contact_wa_id', 'contact_name'])->unique('contact_wa_id')->pluck('contact_name', 'contact_wa_id');
+        $flag = AiContactState::flagged();
+        $taken = AiContactState::takenOverMap();
         return $rows->map(fn ($x) => ['phone_number_id' => $x->phone_number_id, 'contact_wa_id' => $x->contact_wa_id, 'contact_name' => $names[$x->contact_wa_id] ?? null,
-            'unread' => (int) $x->unread, 'last_message' => $last[$x->last_id] ?? null])->sortByDesc(fn ($c) => $c['last_id'] ?? $c['last_message']?->id)->values()->all();
+            'unread' => (int) $x->unread, 'last_message' => $last[$x->last_id] ?? null,
+            'needs_human' => isset($flag[$x->phone_number_id.'-'.$x->contact_wa_id]),
+            'taken_over' => isset($taken[$x->phone_number_id.'-'.$x->contact_wa_id]),
+        ])->sortByDesc(fn ($c) => $c['last_id'] ?? $c['last_message']?->id)->values()->all();
     }
 }

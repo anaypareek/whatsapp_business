@@ -17,7 +17,7 @@ import { NavLink } from './editor-tools'
 import { Instagram } from './instagram'
 import { NumberRequestsPage, TemplateRequestsPage, StatsSection, TemplateDetail } from './portal-extra'
 
-const EP = { numbers: '/client/numbers', conversations: '/client/conversations', thread: '/client/messages/thread', poll: '/client/messages/poll', send: '/client/messages/send' }
+const EP = { numbers: '/client/numbers', conversations: '/client/conversations', thread: '/client/messages/thread', poll: '/client/messages/poll', send: '/client/messages/send', takeover: '/client/conversations/takeover', release: '/client/conversations/release' }
 
 function Home({ me, go }) {
   const [d, setD] = useState(null)

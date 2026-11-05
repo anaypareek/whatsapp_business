@@ -60,6 +60,8 @@ class WebhookProcessor
                     if ($phone) \App\Jobs\SendIncomingMessagePush::dispatchAfterResponse($msg->id); // client phones + Master app
                     // one auto-reply per inbound: template button follow-ups first, then flows/sessions, keyword rules, greeting / off-hours, AI reply
                     if (! $phone) continue;
+                    // manual takeover: skip ALL automatic replies (AI, keywords, greeting, flows, button replies)
+                    if (\App\Models\AiContactState::isTakenOver((int) $phone->id, (string) $msg->contact_wa_id)) continue;
                     if ($this->buttons->handle($phone, $msg)) $stats['button_replies']++;
                     elseif ($this->flows->handle($phone, $msg)) $stats['flows']++;
                     elseif ($body && $this->autoReply($phone, $msg)) $stats['auto_replies']++;

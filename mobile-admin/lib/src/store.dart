@@ -133,9 +133,12 @@ class ChatStore extends ChangeNotifier {
       t.messages..clear()..addAll(((r['messages'] as List?) ?? []).map((e) => Msg.fromJson(Map<String, dynamic>.from(e))))..addAll(pending);
       t.hasMore = r['has_more'] == true;
       t.loaded = true;
-      // first page marks inbound read server-side
       final c = _convs[key];
-      if (c != null && c.unread > 0) { unreadTotal = (unreadTotal - c.unread).clamp(0, 1 << 30); c.unread = 0; }
+      if (c != null) {
+        if (r['taken_over'] != null) c.takenOver = r['taken_over'] == true || r['taken_over'] == 1;
+        if (r['needs_human'] != null) c.needsHuman = r['needs_human'] == true || r['needs_human'] == 1;
+        if (c.unread > 0) { unreadTotal = (unreadTotal - c.unread).clamp(0, 1 << 30); c.unread = 0; }
+      }
     } on ApiException catch (e) {
       t.error = e.message;
     } finally {
@@ -165,6 +168,18 @@ class ChatStore extends ChangeNotifier {
     final c = _convs[convKey(pn, contact)];
     if (c != null && c.unread > 0) { unreadTotal = (unreadTotal - c.unread).clamp(0, 1 << 30); c.unread = 0; notifyListeners(); }
     try { await api.post('${AppConfig.chatBase}/read', {'phone_number_id': pn, 'contact': contact}); } catch (_) {}
+  }
+
+  /// Take over (true) or Give to AI (false). Returns error message or null.
+  Future<String?> setTakeover(int pn, String contact, {required bool take}) async {
+    try {
+      final r = await api.post('${AppConfig.chatBase}/${take ? 'takeover' : 'release'}', {'phone_number_id': pn, 'contact': contact});
+      final c = _convs.putIfAbsent(convKey(pn, contact), () => Conversation(phoneNumberId: pn, contact: contact));
+      c.takenOver = r['taken_over'] == true || r['taken_over'] == 1;
+      c.needsHuman = r['needs_human'] == true || r['needs_human'] == 1;
+      notifyListeners();
+      return null;
+    } on ApiException catch (e) { return e.message; }
   }
 
   /// Sends text or a file. Shows an optimistic "pending" bubble, replaced by the server row (or marked failed).

@@ -139,7 +139,7 @@ class WhatsAppPortalTest extends TestCase
 
         $conv = $this->auth()->getJson('/api/conversations')->assertOk()->json();
         $this->assertCount(1, $conv);
-        $this->auth()->getJson("/api/messages/thread?phone_number_id={$this->num->id}&contact=919000000001")->assertOk()->assertJsonCount(3);
+        $this->auth()->getJson("/api/messages/thread?phone_number_id={$this->num->id}&contact=919000000001")->assertOk()->assertJsonCount(3, 'messages')->assertJsonPath('taken_over', false);
     }
 
     public function test_rule_matching_types_and_per_number_scope(): void

@@ -148,10 +148,27 @@ class _ThreadScreenState extends State<ThreadScreen> {
               const SizedBox(width: 10),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-                Text(conv?.contactName != null ? '+${widget.contact}${num != null ? ' · via ${num.label}' : ''}' : (num != null ? 'via ${num.label}' : ''),
+                Text(
+                  (conv?.takenOver == true)
+                      ? 'Human handling${num != null ? ' · via ${num.label}' : ''}'
+                      : (conv?.contactName != null ? '+${widget.contact}${num != null ? ' · via ${num.label}' : ''}' : (num != null ? 'via ${num.label}' : '')),
                     maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, color: Colors.white70)),
               ])),
             ]),
+            actions: [
+              TextButton(
+                key: const Key('takeover'),
+                onPressed: () async {
+                  final take = conv?.takenOver != true;
+                  final err = await st.setTakeover(widget.phoneNumberId, widget.contact, take: take);
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(err ?? (take ? 'You are handling this chat — AI paused' : 'Chat given back to AI')),
+                  ));
+                },
+                child: Text(conv?.takenOver == true ? 'Give to AI' : 'Take over', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+              ),
+            ],
           ),
           body: Column(children: [
             Expanded(
