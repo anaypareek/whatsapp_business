@@ -114,6 +114,7 @@ Route::middleware(['auth:sanctum', EnsureClient::class])->prefix('client')->grou
     Route::get('/stats', [Api\ClientPortalController::class, 'stats']);
     Route::get('/billing', [Api\BillingController::class, 'mine']);
     Route::get('/billing/due', [Api\BillingController::class, 'myDue']);
+    Route::get('/ai-usage', [Api\AiUsageController::class, 'mine']);
     Route::get('/stats/templates/{template}', [Api\ClientPortalController::class, 'templateSends'])->whereNumber('template');
     Route::get('/api-keys/logs', [Api\ApiKeyController::class, 'logs']);
     Route::apiResource('api-keys', Api\ApiKeyController::class)->only(['index', 'store', 'update', 'destroy'])->parameters(['api-keys' => 'apiKey']);
@@ -246,6 +247,10 @@ Route::middleware(['auth:sanctum', EnsureStaff::class])->group(function () {
         Route::get('/billing/clients/{client}', [Api\BillingController::class, 'show']);
         Route::put('/billing/clients/{client}/rates', [Api\BillingController::class, 'updateRates']);
         Route::post('/billing/clients/{client}/payments', [Api\BillingController::class, 'storePayment']);
+        Route::get('/ai-usage', [Api\AiUsageController::class, 'summary']);
+        Route::get('/ai-usage/clients/{client}', [Api\AiUsageController::class, 'show']);
+        Route::post('/ai-usage/clients/{client}/credits', [Api\AiUsageController::class, 'addCredit']);
+        Route::put('/ai-usage/clients/{client}', [Api\AiUsageController::class, 'updateClient']);
         Route::get('/requests/pending-counts', fn () => ['numbers' => \App\Models\PhoneNumberRequest::where('status', 'pending')->count(),
             'templates' => \App\Models\TemplateRequest::where('status', 'pending')->count()]);
         Route::get('/number-requests', [Api\NumberRequestController::class, 'index']);

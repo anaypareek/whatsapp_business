@@ -9,6 +9,7 @@ class SettingsController extends Controller
 {
     public function show()
     {
+        \App\Services\AiUsageService::seedDefaults();
         $out = [];
         foreach (Setting::KEYS as $k) {
             $v = Setting::get($k);
@@ -16,7 +17,16 @@ class SettingsController extends Controller
             if (in_array($k, Setting::SECRET)) $out[$k.'_set'] = (bool) $v;
         }
         $out['webhook_url'] = rtrim(config('app.url'), '/').'/api/webhook/whatsapp';
-        $out['ai_defaults'] = ['base_url' => \App\Services\AiReplyService::DEFAULT_BASE_URL, 'model' => \App\Services\AiReplyService::DEFAULT_MODEL, 'global_max_per_hour' => \App\Services\AiReplyService::DEFAULT_GLOBAL_PER_HOUR];
+        $out['ai_defaults'] = [
+            'base_url' => \App\Services\AiReplyService::DEFAULT_BASE_URL,
+            'model' => \App\Services\AiReplyService::DEFAULT_MODEL,
+            'global_max_per_hour' => \App\Services\AiReplyService::DEFAULT_GLOBAL_PER_HOUR,
+            'usd_inr_rate' => \App\Services\AiUsageService::DEFAULT_USD_INR,
+            'model_prices' => \App\Services\AiUsageService::DEFAULT_PRICES,
+        ];
+        $out['ai_usd_inr_rate'] = $out['ai_usd_inr_rate'] !== '' ? $out['ai_usd_inr_rate'] : (string) \App\Services\AiUsageService::DEFAULT_USD_INR;
+        if ($out['ai_model_prices'] === '') $out['ai_model_prices'] = json_encode(\App\Services\AiUsageService::DEFAULT_PRICES);
+        $out['ai_model_prices_parsed'] = \App\Services\AiUsageService::prices();
         $out['graph_version'] = config('services.whatsapp.graph_version');
         return $out;
     }
@@ -26,7 +36,7 @@ class SettingsController extends Controller
 
     public function update(Request $r)
     {
-        $d = $r->validate(collect(Setting::KEYS)->mapWithKeys(fn ($k) => [$k => 'nullable|string|max:2000'])->all());
+        $d = $r->validate(collect(Setting::KEYS)->mapWithKeys(fn ($k) => [$k => 'nullable|string|max:'.($k === 'ai_model_prices' ? '8000' : '2000')])->all());
         foreach ($d as $k => $v) {
             // secrets: blank or masked value means "keep existing"
             if (in_array($k, Setting::SECRET) && ($v === null || $v === '' || str_starts_with($v, '••••'))) continue;

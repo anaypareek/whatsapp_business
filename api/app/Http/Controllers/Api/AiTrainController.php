@@ -11,6 +11,7 @@ use App\Models\PhoneNumber;
 use App\Services\AiKnowledge;
 use App\Services\AiReplyService;
 use App\Services\AiTrainer;
+use App\Services\AiUsageService;
 use App\Models\AiOpenQuestion;
 use App\Models\AiTrainerMessage;
 use Illuminate\Http\Request;
@@ -45,8 +46,9 @@ class AiTrainController extends Controller
         $n = $this->num($r, $phoneNumber);
         $d = $r->validate(['messages' => 'required|array|min:1|max:20', 'messages.*.role' => 'required|in:user,assistant', 'messages.*.content' => 'required|string|max:2000']);
         if (! AiReplyService::config()['key']) return response()->json(['message' => 'Set the OpenAI API key in Settings → AI Replies first.'], 422);
+        if ($why = app(AiUsageService::class)->skipReason($n)) return response()->json(['message' => 'AI credits exhausted. Ask your admin to top up.', 'reason' => $why], 402);
         $kb = AiReplySetting::where('phone_number_id', $n->id)->value('knowledge_base');
-        $text = $ai->complete($n, $kb, $d['messages']);
+        $text = $ai->complete($n, $kb, $d['messages'], AiUsageService::FEATURE_OTHER);
         if ($text === null) return response()->json(['message' => 'AI provider error or timeout. Check the key / model in Settings.'], 502);
         $p = AiReplyService::parse($n, $text);
         return ['raw' => $text, 'reply' => $p['handoff'] ? AiReplyService::HANDOFF_TEXT : $p['text'], 'handoff' => $p['handoff'],
@@ -73,6 +75,7 @@ class AiTrainController extends Controller
         $files = $r->file('files', []);
         if ($text === '' && ! $files) return response()->json(['message' => 'Type something or attach a file.', 'errors' => ['message' => ['Required']]], 422);
         if (! AiReplyService::config()['key']) return response()->json(['message' => 'Set the OpenAI API key in Settings → AI Replies first.'], 422);
+        if ($why = app(AiUsageService::class)->skipReason($n)) return response()->json(['message' => 'AI credits exhausted. Ask your admin to top up.', 'reason' => $why], 402);
         [$user, $bot, $notes] = $t->turn($n, $text, $files);
         if (! $bot) return response()->json(['message' => 'AI provider error or timeout. Your message was kept; try again.', 'user' => $user, 'saved' => $notes], 502);
         return ['user' => $user, 'reply' => $bot, 'saved' => $notes, 'open_questions' => AiOpenQuestion::where('phone_number_id', $n->id)->where('status', 'open')->count()];

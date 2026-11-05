@@ -141,7 +141,7 @@ class AiTrainerTest extends TestCase
 
     public function test_admin_only_errors_and_clear(): void
     {
-        $c = Client::create(['name' => 'Oswal', 'email' => 'o@c.t', 'password' => 'password123']);
+        $c = Client::create(['name' => 'Oswal', 'email' => 'o@c.t', 'password' => 'password123', 'ai_block_when_empty' => false]);
         $this->app['auth']->forgetGuards();
         $tok = $c->createToken('c')->plainTextToken;
         $this->withToken($tok)->getJson("/api/ai-train/{$this->n->id}/trainer")->assertForbidden();

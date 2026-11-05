@@ -57,6 +57,7 @@ class AiReplyService
         $conv = Message::where('phone_number_id', $phone->id)->where('contact_wa_id', $in->contact_wa_id)->where('direction', 'out')->where('source', 'ai');
         if ((clone $conv)->where('created_at', '>=', now()->subHour())->count() >= max(1, $s->max_per_hour)) return 'rate_limit_contact';
         if (Message::where('direction', 'out')->where('source', 'ai')->where('created_at', '>=', now()->subHour())->count() >= max(1, static::config()['global_per_hour'])) return 'rate_limit_global';
+        if ($why = app(AiUsageService::class)->skipReason($phone)) return $why;
         return null;
     }
 
@@ -86,11 +87,15 @@ class AiReplyService
         return $p;
     }
 
-    /** One chat-completions call. Returns the text or null (error / timeout); never logs the key or bodies. */
-    public function complete(PhoneNumber $phone, ?string $kb, array $history): ?string
+    /** One chat-completions call. Returns the text or null (error / timeout); never logs the key or bodies. Records token usage when the provider returns it. */
+    public function complete(PhoneNumber $phone, ?string $kb, array $history, string $feature = AiUsageService::FEATURE_AUTO): ?string
     {
         $cfg = static::config();
         if (! $cfg['key']) return null;
+        if ($feature !== AiUsageService::FEATURE_AUTO && ($why = app(AiUsageService::class)->skipReason($phone))) {
+            Log::info('AI skipped: '.$why, ['phone_number_id' => $phone->id, 'feature' => $feature]);
+            return null;
+        }
         $query = collect($history)->where('role', 'user')->last()['content'] ?? '';
         try {
             $res = Http::withToken($cfg['key'])->acceptJson()->timeout(self::TIMEOUT)->connectTimeout(5)
@@ -99,6 +104,8 @@ class AiReplyService
                     'messages' => array_merge([['role' => 'system', 'content' => static::systemPrompt($phone, $kb, $query)]], array_slice($history, -self::HISTORY)),
                 ]);
             if (! $res->successful()) { Log::warning('AI reply: provider HTTP '.$res->status(), ['phone_number_id' => $phone->id]); return null; }
+            $usage = $res->json('usage') ?? [];
+            app(AiUsageService::class)->record($phone, $feature, $cfg['model'], is_array($usage) ? $usage : []);
             return trim((string) ($res->json('choices.0.message.content') ?? ''));
         } catch (Throwable $e) {
             Log::warning('AI reply: provider unreachable ('.class_basename($e).')', ['phone_number_id' => $phone->id]);

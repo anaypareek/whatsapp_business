@@ -67,13 +67,27 @@ export const MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1-nano']
 /** Admin Settings → AI Replies (provider URL, model, encrypted API key, global limit). */
 export function AiProviderSettings() {
   const toast = useToast(); const [s, setS] = useState(null); const [f, setF] = useState(null); const [busy, setBusy] = useState(false); const [custom, setCustom] = useState(false)
-  const apply = (r) => { setS(r); setCustom(!!r.ai_model && !MODELS.includes(r.ai_model)); setF({ ai_base_url: r.ai_base_url || '', ai_model: r.ai_model || '', ai_api_key: '', ai_global_max_per_hour: r.ai_global_max_per_hour || '', orders_api_base_url: r.orders_api_base_url || '', orders_api_key: '' }) }
+  const apply = (r) => {
+    setS(r); setCustom(!!r.ai_model && !MODELS.includes(r.ai_model))
+    const prices = r.ai_model_prices_parsed || r.ai_defaults?.model_prices || {}
+    const mini = prices['gpt-4o-mini'] || { input: 0.15, output: 0.60 }
+    setF({ ai_base_url: r.ai_base_url || '', ai_model: r.ai_model || '', ai_api_key: '', ai_global_max_per_hour: r.ai_global_max_per_hour || '',
+      ai_usd_inr_rate: r.ai_usd_inr_rate || String(r.ai_defaults?.usd_inr_rate || 88),
+      price_input: mini.input, price_output: mini.output,
+      orders_api_base_url: r.orders_api_base_url || '', orders_api_key: '' })
+  }
   useEffect(() => { api('/settings').then(apply).catch((e) => toast.error(e.message)) }, []) // eslint-disable-line
   if (!f) return <Card title="AI Replies" icon={Sparkles}><Skeleton h={120} /></Card>
   const d = s.ai_defaults || {}
   const save = async (e) => {
     e.preventDefault(); setBusy(true)
-    try { apply(await api('/settings', { method: 'PUT', body: { ...f, ai_model: f.ai_model || MODELS[0], ai_api_key: f.ai_api_key || null, orders_api_key: f.orders_api_key || null } })); toast.success('AI settings saved (key encrypted)') }
+    try {
+      const prices = { ...(s.ai_model_prices_parsed || {}), 'gpt-4o-mini': { input: Number(f.price_input) || 0.15, output: Number(f.price_output) || 0.60 } }
+      const body = { ai_base_url: f.ai_base_url, ai_model: f.ai_model || MODELS[0], ai_api_key: f.ai_api_key || null, ai_global_max_per_hour: f.ai_global_max_per_hour,
+        ai_usd_inr_rate: String(f.ai_usd_inr_rate || 88), ai_model_prices: JSON.stringify(prices),
+        orders_api_base_url: f.orders_api_base_url, orders_api_key: f.orders_api_key || null }
+      apply(await api('/settings', { method: 'PUT', body })); toast.success('AI settings saved (key encrypted)')
+    }
     catch (err) { toast.error(err.message) } finally { setBusy(false) }
   }
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
@@ -90,6 +104,13 @@ export function AiProviderSettings() {
       <Field label="OpenAI API key" icon={KeyRound} hint={s.ai_api_key_set ? `Saved: ${s.ai_api_key} — leave blank to keep` : 'e.g. an OpenAI key (sk-…); stored encrypted, never shown again'}>
         <input type="password" autoComplete="new-password" value={f.ai_api_key} onChange={set('ai_api_key')} /></Field>
       <Field label="Global max AI replies / hour" icon={Gauge} hint={`All numbers combined. Default ${d.global_max_per_hour}`}><input type="number" min={1} value={f.ai_global_max_per_hour} onChange={set('ai_global_max_per_hour')} placeholder={String(d.global_max_per_hour)} /></Field>
+      <p className="field-label" style={{ marginTop: 8 }}>AI cost & credits</p>
+      <p className="muted small">Used to meter token usage in INR. Default gpt-4o-mini $0.15 / $0.60 per 1M input/output tokens; USD→INR rate default 88.</p>
+      <div className="form-2">
+        <Field label="USD → INR rate" icon={IndianRupee} hint={`Default ${d.usd_inr_rate || 88}`}><input type="number" step="0.01" min={1} value={f.ai_usd_inr_rate} onChange={set('ai_usd_inr_rate')} /></Field>
+        <Field label="gpt-4o-mini input $ / 1M" hint="USD per million prompt tokens"><input type="number" step="0.01" min={0} value={f.price_input} onChange={set('price_input')} /></Field>
+        <Field label="gpt-4o-mini output $ / 1M" hint="USD per million completion tokens"><input type="number" step="0.01" min={0} value={f.price_output} onChange={set('price_output')} /></Field>
+      </div>
       <p className="field-label" style={{ marginTop: 8 }}>Order status lookup (optional)</p>
       <p className="muted small">Read-only API of your order portal; always queried with the customer's own WhatsApp number. Contract: docs/oswal-order-status-api.md</p>
       <div className="form-2">

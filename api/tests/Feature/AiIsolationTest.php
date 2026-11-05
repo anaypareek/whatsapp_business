@@ -34,8 +34,8 @@ class AiIsolationTest extends TestCase
         Storage::fake('public');
         foreach (['app_secret' => 'shh', 'access_token' => 'EAAtoken', 'waba_id' => '999', 'ai_api_key' => 'sk-test-SECRET1234', 'ai_base_url' => 'https://llm.test/v1',
             'orders_api_base_url' => 'https://orders.test/api', 'orders_api_key' => 'ord-SECRET9876'] as $k => $v) Setting::put($k, $v);
-        $this->ca = Client::create(['name' => 'Oswal', 'email' => 'o@c.t', 'password' => 'password123']);
-        $this->cb = Client::create(['name' => 'Beta', 'email' => 'b@c.t', 'password' => 'password123']);
+        $this->ca = Client::create(['name' => 'Oswal', 'email' => 'o@c.t', 'password' => 'password123', 'ai_block_when_empty' => false]);
+        $this->cb = Client::create(['name' => 'Beta', 'email' => 'b@c.t', 'password' => 'password123', 'ai_block_when_empty' => false]);
         $this->a = PhoneNumber::create(['client_id' => $this->ca->id, 'phone_number_id' => '7001', 'display_number' => '+91 90909 00894', 'name' => 'Oswal']);
         $this->b = PhoneNumber::create(['client_id' => $this->cb->id, 'phone_number_id' => '7002', 'display_number' => '+91 90000 70002', 'name' => 'Beta']);
         foreach ([$this->a, $this->b] as $n) AiReplySetting::create(['phone_number_id' => $n->id, 'enabled' => true, 'allowlist' => ['919811000001'], 'max_per_hour' => 50]);
@@ -160,5 +160,29 @@ class AiIsolationTest extends TestCase
         $this->assertStringContainsString('Yes, ₹120/kg', $this->llm()->last()['messages'][0]['content']);
         $this->hook('7002', 'organic jaggery available?', '919811000003');
         $this->assertStringNotContainsString('₹120', $this->llm()->last()['messages'][0]['content']);
+    }
+
+    public function test_client_ai_usage_is_isolated(): void
+    {
+        \App\Services\AiUsageService::seedDefaults();
+        Http::fake([
+            'llm.test/*' => fn () => Http::response(['choices' => [['message' => ['role' => 'assistant', 'content' => 'ok']]], 'usage' => ['prompt_tokens' => 100, 'completion_tokens' => 50, 'total_tokens' => 150]]),
+            'orders.test/*' => fn () => Http::response(['orders' => []]),
+            'graph.facebook.com/*/messages' => fn () => Http::response(['messages' => [['id' => 'wamid.O'.bin2hex(random_bytes(5))]]]),
+        ]);
+        app(\App\Services\AiUsageService::class)->addCredit($this->ca, 5, 'seed', null);
+        app(\App\Services\AiUsageService::class)->addCredit($this->cb, 5, 'seed', null);
+        $this->hook('7001', 'hi A');
+        $this->hook('7002', 'hi B');
+        $mine = $this->as($this->ca)->getJson('/api/client/ai-usage')->assertOk()->json();
+        $this->assertSame($this->ca->id, $mine['client']['id']);
+        $this->assertSame(1, $mine['stats']['calls']);
+        foreach ($mine['recent'] as $r) $this->assertSame($this->ca->id, $r['client_id']);
+        $this->as($this->ca)->getJson('/api/ai-usage')->assertForbidden();
+        $this->as($this->ca)->getJson("/api/ai-usage/clients/{$this->cb->id}")->assertForbidden();
+        $b = $this->as($this->cb)->getJson('/api/client/ai-usage')->assertOk()->json();
+        $this->assertSame(1, $b['stats']['calls']);
+        $this->assertSame($this->cb->id, $b['client']['id']);
+        $this->assertEqualsWithDelta($mine['balance']['used'] + $b['balance']['used'], (float) \App\Models\AiUsageLog::sum('cost_inr'), 1e-6);
     }
 }

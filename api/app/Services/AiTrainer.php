@@ -107,6 +107,10 @@ P;
     {
         $cfg = AiReplyService::config();
         if (! $cfg['key']) return null;
+        if ($why = app(AiUsageService::class)->skipReason($n)) {
+            Log::info('AI trainer skipped: '.$why, ['phone_number_id' => $n->id]);
+            return null;
+        }
         $history = AiTrainerMessage::where('phone_number_id', $n->id)->latest('id')->limit(self::CONTEXT)->get()->reverse()
             ->map(fn ($m) => ['role' => $m->role, 'content' => static::contextText($m)])->values()->all();
         try {
@@ -115,6 +119,8 @@ P;
                 'messages' => array_merge([['role' => 'system', 'content' => static::systemPrompt($n)]], $history),
             ]);
             if (! $res->successful()) { Log::warning('AI trainer: provider HTTP '.$res->status()); return null; }
+            $usage = $res->json('usage') ?? [];
+            app(AiUsageService::class)->record($n, AiUsageService::FEATURE_TRAIN, $cfg['model'], is_array($usage) ? $usage : []);
             return trim((string) ($res->json('choices.0.message.content') ?? ''));
         } catch (Throwable $e) {
             Log::warning('AI trainer: provider unreachable ('.class_basename($e).')');

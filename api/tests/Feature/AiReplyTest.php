@@ -33,7 +33,7 @@ class AiReplyTest extends TestCase
         parent::setUp();
         foreach (['app_secret' => 'shh', 'access_token' => 'EAAtoken', 'waba_id' => '999', 'ai_api_key' => 'sk-test-SECRET1234', 'ai_base_url' => 'https://llm.test/v1'] as $k => $v) Setting::put($k, $v);
         $this->admin = User::create(['name' => 'A', 'email' => 'a@t.l', 'password' => 'password123', 'is_admin' => true]);
-        $this->c = Client::create(['name' => 'Oswal', 'email' => 'o@c.t', 'password' => 'password123']);
+        $this->c = Client::create(['name' => 'Oswal', 'email' => 'o@c.t', 'password' => 'password123', 'ai_block_when_empty' => false]);
         $this->n = PhoneNumber::create(['client_id' => $this->c->id, 'phone_number_id' => '7001', 'display_number' => '+91 90909 00894', 'name' => 'Oswal']);
         Http::fake([
             'llm.test/*' => fn () => Http::response($this->aiStatus === 200 ? ['choices' => [['message' => ['role' => 'assistant', 'content' => $this->aiAnswer]]]] : ['error' => 'boom'], $this->aiStatus),
