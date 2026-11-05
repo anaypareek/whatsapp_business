@@ -20,7 +20,7 @@ class PushService {
   final Api api;
   final _local = FlutterLocalNotificationsPlugin();
   bool available = false;
-  /// Why push is off (shown nowhere critical; for diagnostics).
+  /// Why push is off (shown in a snackbar after login / cold start).
   String? reason;
   String? _token;
   StreamSubscription? _refreshSub, _msgSub, _openSub;
@@ -45,18 +45,27 @@ class PushService {
         projectId: '${j['projectId']}', storageBucket: j['storageBucket'] == null ? null : '${j['storageBucket']}');
   }
 
-  static Future<bool> ensureFirebase(FirebaseOptions o) async {
-    if (Firebase.apps.isNotEmpty) return true; // already up (native MainApplication init or earlier call)
-    try { await Firebase.initializeApp(options: o); return true; }
-    on FirebaseException catch (e) { return e.code == 'duplicate-app'; }
-    catch (_) { return false; }
+  /// Returns null on success, or an error message (never fails silently).
+  static Future<String?> ensureFirebase(FirebaseOptions o) async {
+    if (Firebase.apps.isNotEmpty) return null; // already up (native MainApplication init or earlier call)
+    try {
+      await Firebase.initializeApp(options: o);
+      return null;
+    } on FirebaseException catch (e) {
+      if (e.code == 'duplicate-app') return null;
+      return 'Firebase init failed (${e.code}): ${e.message ?? e.code}';
+    } catch (e) {
+      return 'Firebase init failed: $e';
+    }
   }
 
   /// Every app start: refresh the options from the server (falls back to the cache), then init Firebase.
   Future<void>? _initF;
   Future<void> init() => _initF ??= _init();
   Future<void> _init() async {
+    available = false;
     FirebaseOptions? opts;
+    Object? fetchErr;
     try {
       final r = await api.get('/mobile/config', query: {'package': AppConfig.packageName});
       // An older server ignores ?package= and returns the client app's Firebase app id; never use another package's options.
@@ -66,25 +75,46 @@ class PushService {
       if (!forUs) {
         await p.remove(_prefsKey);
         reason = 'Server has no Firebase app for ${AppConfig.packageName} yet';
+        return;
       } else if (o is Map) {
         await p.setString(_prefsKey, jsonEncode(o));
         opts = optionsFromJson(o);
+        if (opts == null) {
+          reason = 'Server push options were incomplete (need apiKey, appId, projectId)';
+          return;
+        }
       } else if (r['push']?['enabled'] == false) {
         await p.remove(_prefsKey); // admin removed the config (or it has no app for this package)
         reason = '${r['push']?['reason'] ?? 'Push not configured on the server'}';
         return;
+      } else {
+        reason = 'Server returned no Firebase options for ${AppConfig.packageName}';
+        return;
       }
-    } catch (_) {
+    } catch (e) {
+      fetchErr = e;
       opts = await cachedOptions(); // offline: use the cache
     }
-    if (opts == null) { reason ??= 'Push not configured on the server'; debugPrint('push: $reason'); return; }
+    if (opts == null) {
+      reason = fetchErr != null
+          ? 'Could not load push config from server: $fetchErr'
+          : (reason ?? 'Push not configured on the server');
+      debugPrint('push: $reason');
+      return;
+    }
     if (Firebase.apps.isNotEmpty && Firebase.app().options.appId != opts.appId) {
       // Firebase was started natively from options cached by an older build (wrong app id). The new options are cached; they apply on next start.
       reason = 'Push settings updated; reopen the app to enable notifications';
       return;
     }
-    if (!await ensureFirebase(opts)) return;
+    final initErr = await ensureFirebase(opts);
+    if (initErr != null) {
+      reason = initErr;
+      debugPrint('push: $reason');
+      return;
+    }
     available = true;
+    reason = null;
 
     await _local.initialize(
       settings: const InitializationSettings(android: AndroidInitializationSettings('@drawable/ic_notification')),
@@ -95,8 +125,8 @@ class PushService {
         description: 'New WhatsApp messages', importance: Importance.high));
 
     FirebaseMessaging.onBackgroundMessage(firebaseBackgroundHandler);
-    _msgSub = FirebaseMessaging.onMessage.listen(_onForeground);
-    _openSub = FirebaseMessaging.onMessageOpenedApp.listen((m) => _openFromData(m.data));
+    _msgSub ??= FirebaseMessaging.onMessage.listen(_onForeground);
+    _openSub ??= FirebaseMessaging.onMessageOpenedApp.listen((m) => _openFromData(m.data));
     final initial = await FirebaseMessaging.instance.getInitialMessage();
     if (initial != null) Future.delayed(const Duration(milliseconds: 600), () => _openFromData(initial.data));
     final launch = await _local.getNotificationAppLaunchDetails();
@@ -104,19 +134,75 @@ class PushService {
   }
 
   /// After login (and on each start while logged in): ask permission, register this device.
-  Future<void> register() async {
-    try { await init(); } catch (e) { reason = 'Push init failed: $e'; }
+  /// Retries a few times — Play Services / FCM can be slow right after cold start.
+  Future<void> register({int attempts = 3}) async {
+    registered = false;
+    for (var i = 0; i < attempts; i++) {
+      if (i > 0) {
+        _initF = null; // allow a fresh config fetch / Firebase init
+        await Future<void>.delayed(Duration(milliseconds: 600 * i));
+      }
+      await _registerOnce();
+      if (registered) return;
+      // Do not keep retrying permanent config / permission problems.
+      final r = reason ?? '';
+      if (r.contains('blocked for this app') ||
+          r.contains('no Firebase app for') ||
+          r.contains('Push not configured') ||
+          r.contains('Push settings updated') ||
+          r.contains('Not signed in') ||
+          r.contains('Server rejected')) {
+        return;
+      }
+    }
+    reason ??= 'Push registration did not complete';
+    debugPrint('push: gave up after $attempts attempts: $reason');
+  }
+
+  Future<void> _registerOnce() async {
+    try {
+      await init();
+    } catch (e) {
+      reason = 'Push init failed: $e';
+    }
     // A failed/unconfigured init must not stick for the whole process: retry once (e.g. the admin uploaded the config after app start).
-    if (!available) { _initF = null; try { await init(); } catch (e) { reason = 'Push init failed: $e'; } }
-    if (!available) { registered = false; debugPrint('push: not registering: $reason'); return; }
-    if (api.token == null) { reason = 'Not signed in'; return; }
+    if (!available) {
+      _initF = null;
+      try {
+        await init();
+      } catch (e) {
+        reason = 'Push init failed: $e';
+      }
+    }
+    if (!available) {
+      registered = false;
+      reason ??= 'Push could not start (Firebase not available)';
+      debugPrint('push: not registering: $reason');
+      return;
+    }
+    if (api.token == null) {
+      reason = 'Not signed in';
+      return;
+    }
     try {
       final perm = await FirebaseMessaging.instance.requestPermission(alert: true, badge: true, sound: true); // Android 13+ POST_NOTIFICATIONS
-      if (perm.authorizationStatus == AuthorizationStatus.denied) reason = 'Notifications are blocked for this app in Android settings';
+      final blocked = perm.authorizationStatus == AuthorizationStatus.denied;
       _token = await FirebaseMessaging.instance.getToken();
-      if (_token == null) { reason = 'Firebase returned no device token'; return; }
-      _refreshSub ??= FirebaseMessaging.instance.onTokenRefresh.listen((t) { _token = t; _send(t); });
+      if (_token == null) {
+        reason = blocked
+            ? 'Notifications are blocked for this app in Android settings'
+            : 'Firebase returned no device token (is Google Play Services available?)';
+        return;
+      }
+      _refreshSub ??= FirebaseMessaging.instance.onTokenRefresh.listen((t) {
+        _token = t;
+        _send(t);
+      });
       await _send(_token!);
+      // Token can register even when the user denied the tray permission — keep the warning visible.
+      if (registered && blocked) {
+        reason = 'Notifications are blocked for this app in Android settings';
+      }
     } catch (e) {
       reason = 'Could not get a push token from Firebase: $e';
       debugPrint('push: register failed $e');
@@ -129,8 +215,12 @@ class PushService {
   Future<void> _send(String t) async {
     try {
       await api.post(AppConfig.devicesPath, {'token': t, 'platform': 'android', 'app_version': AppConfig.version});
-      registered = true; reason = null;
-    } catch (e) { registered = false; reason = 'Server rejected device registration: $e'; }
+      registered = true;
+      reason = null;
+    } catch (e) {
+      registered = false;
+      reason = 'Server rejected device registration: $e';
+    }
   }
 
   /// On logout (token still valid): remove this device on the server and drop the FCM token.
@@ -141,6 +231,7 @@ class PushService {
       if (t != null) await api.delete(AppConfig.devicesPath, {'token': t});
       await FirebaseMessaging.instance.deleteToken();
       _token = null;
+      registered = false;
       await _local.cancelAll();
     } catch (_) {}
   }

@@ -132,5 +132,10 @@ class AssignAndAdminAppTest extends TestCase
         $this->as($this->admin)->getJson('/api/number-requests')->assertOk();
         $this->as($this->admin)->getJson('/api/template-requests')->assertOk();
         $this->postJson('/api/auth/login', ['email' => 'ad@t.l', 'password' => 'password123'])->assertOk()->assertJsonStructure(['token', 'user' => ['is_admin']]);
+        // Master app sends device_name → PAT is mobile:… (web portal stays "portal")
+        $this->postJson('/api/auth/login', ['email' => 'ad@t.l', 'password' => 'password123', 'device_name' => 'Android app'])
+            ->assertOk();
+        $this->assertDatabaseHas('personal_access_tokens', ['tokenable_id' => $this->admin->id, 'name' => 'mobile:Android app']);
+        $this->assertDatabaseHas('personal_access_tokens', ['tokenable_id' => $this->admin->id, 'name' => 'portal']);
     }
 }
