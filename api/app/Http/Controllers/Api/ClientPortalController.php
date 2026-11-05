@@ -38,6 +38,35 @@ class ClientPortalController extends Controller
         return $n;
     }
 
+    /** Own number that is allowed to send (has Meta phone_number_id; not deleted/banned). */
+    protected function ownSendableNumber(Request $r, $id): PhoneNumber
+    {
+        $n = $this->ownNumber($r, $id);
+        if (! $n->phone_number_id) {
+            throw ValidationException::withMessages(['phone_number_id' => 'This number is not connected to Meta yet.']);
+        }
+        $st = strtoupper((string) ($n->status ?? ''));
+        if (in_array($st, ['DELETED', 'BANNED', 'RESTRICTED', 'DISCONNECTED', 'MIGRATED'], true)) {
+            throw ValidationException::withMessages(['phone_number_id' => "Number status is {$n->status}; only active numbers can send."]);
+        }
+        return $n;
+    }
+
+    /** True when the contact messaged this number within the last 24 hours (customer-service window). */
+    public static function inServiceWindow(int $phoneNumberId, string $contact): bool
+    {
+        $contact = preg_replace('/\D/', '', $contact);
+        return Message::where('phone_number_id', $phoneNumberId)->where('contact_wa_id', $contact)
+            ->where('direction', 'in')->where('created_at', '>=', now()->subHours(24))->exists();
+    }
+
+    protected function ownTemplate(Request $r, $id): MessageTemplate
+    {
+        $t = $r->user()->templates()->where('status', 'APPROVED')->find($id);
+        abort_unless($t, 404, 'Template not found');
+        return $t;
+    }
+
     public function numbers(Request $r) { return $r->user()->phoneNumbers()->orderBy('id')->get(); }
 
     /** Only APPROVED templates assigned to this client. */
@@ -176,10 +205,12 @@ class ClientPortalController extends Controller
         $q = Message::where('phone_number_id', $n->id)->where('contact_wa_id', $d['contact']);
         $msgs = (clone $q)->orderBy('id')->limit(500)->get();
         (clone $q)->where('direction', 'in')->whereNull('read_at')->update(['read_at' => now()]);
+        $contact = preg_replace('/\D/', '', $d['contact']);
         return [
             'messages' => $msgs,
-            'taken_over' => AiContactState::isTakenOver((int) $n->id, $d['contact']),
-            'needs_human' => (bool) AiContactState::where('phone_number_id', $n->id)->where('contact_wa_id', $d['contact'])->value('needs_human'),
+            'taken_over' => AiContactState::isTakenOver((int) $n->id, $contact),
+            'needs_human' => (bool) AiContactState::where('phone_number_id', $n->id)->where('contact_wa_id', $contact)->value('needs_human'),
+            'in_window' => self::inServiceWindow((int) $n->id, $contact),
         ];
     }
 
@@ -190,13 +221,42 @@ class ClientPortalController extends Controller
             'unread' => (clone $m)->where('direction', 'in')->whereNull('read_at')->count()];
     }
 
+    /**
+     * Free-form text/media send from a client's own number.
+     * Outside the 24h customer-service window only approved templates are allowed (use sendTemplate).
+     * Stored as source=manual so it counts as human outbound (clears needs_human, not taken_over).
+     */
     public function send(Request $r, MessagingService $svc)
     {
         $d = $r->validate([
             'phone_number_id' => 'required|integer', 'to' => ['required', 'string', 'regex:/^\+?[0-9 ()-]{7,20}$/'],
             'text' => 'nullable|string|max:4096|required_without:file', 'file' => MessageController::FILE_RULE,
         ]);
-        $msg = $svc->send($this->ownNumber($r, $d['phone_number_id']), $d['to'], $d['text'] ?? null, $r->file('file'), null, 'client');
+        $from = $this->ownSendableNumber($r, $d['phone_number_id']);
+        $to = preg_replace('/\D/', '', $d['to']);
+        if (! self::inServiceWindow((int) $from->id, $to)) {
+            throw ValidationException::withMessages([
+                'to' => 'Outside the 24-hour messaging window. Send an approved template instead, or wait until the customer messages you again.',
+            ]);
+        }
+        $msg = $svc->send($from, $to, $d['text'] ?? null, $r->file('file'), null, 'manual');
+        return response()->json($msg, $msg->status === 'failed' ? 502 : 201);
+    }
+
+    /** Send an APPROVED template assigned to this client, from one of their own numbers. Always allowed (opens a conversation). */
+    public function sendTemplate(Request $r, MessagingService $svc)
+    {
+        $d = $r->validate([
+            'phone_number_id' => 'required|integer',
+            'to' => ['required', 'string', 'regex:/^\+?[0-9 ()-]{7,20}$/'],
+            'template_id' => 'required|integer',
+            'params' => 'nullable|array', 'params.*' => 'nullable|string|max:1024',
+            'header_param' => 'nullable|string|max:2000',
+            'button_params' => 'nullable|array', 'button_params.*' => 'nullable|string|max:2000',
+        ]);
+        $from = $this->ownSendableNumber($r, $d['phone_number_id']);
+        $tpl = $this->ownTemplate($r, $d['template_id']);
+        $msg = $svc->sendTemplate($from, $d['to'], $tpl, $d['params'] ?? [], $d['header_param'] ?? null, $d['button_params'] ?? [], 'manual');
         return response()->json($msg, $msg->status === 'failed' ? 502 : 201);
     }
 

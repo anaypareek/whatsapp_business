@@ -54,7 +54,7 @@ Route::middleware(['auth:sanctum', EnsureClient::class])->prefix('client')->grou
         Route::post('/chat/release', [Api\ClientChatController::class, 'release']);
         Route::post('/chat/read', [Api\ClientChatController::class, 'read']);
         Route::get('/chat/media/{message}', [Api\ClientChatController::class, 'media'])->whereNumber('message');
-        Route::post('/chat/send', [Api\ClientPortalController::class, 'send']);
+        Route::post('/chat/send', [Api\ClientPortalController::class, 'send'])->middleware('throttle:client-send');
         Route::post('/devices', [Api\ClientChatController::class, 'registerDevice']);
         Route::delete('/devices', [Api\ClientChatController::class, 'removeDevice']);
     });
@@ -90,7 +90,8 @@ Route::middleware(['auth:sanctum', EnsureClient::class])->prefix('client')->grou
     Route::post('/conversations/release', [Api\ClientPortalController::class, 'release']);
     Route::get('/messages/thread', [Api\ClientPortalController::class, 'thread']);
     Route::get('/messages/poll', [Api\ClientPortalController::class, 'poll']);
-    Route::post('/messages/send', [Api\ClientPortalController::class, 'send']);
+    Route::post('/messages/send', [Api\ClientPortalController::class, 'send'])->middleware('throttle:client-send');
+    Route::post('/messages/send-template', [Api\ClientPortalController::class, 'sendTemplate'])->middleware('throttle:client-send');
     Route::get('/number-requests', [Api\ClientPortalController::class, 'numberRequests']);
     Route::post('/number-requests', [Api\ClientPortalController::class, 'storeNumberRequest'])->middleware('throttle:20,1');
     Route::get('/template-requests', [Api\ClientPortalController::class, 'templateRequests']);

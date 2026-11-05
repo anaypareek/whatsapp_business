@@ -184,8 +184,8 @@ function Composer({ numbers, fixedNumber, fixedTo, onSent, compact, sendPath = '
 }
 
 // ---------------- Send Message ----------------
-export function SendMessage() {
-  const [numbers] = useLoad('/phone-numbers')
+export function SendMessage({ numbersPath = '/phone-numbers', sendPath = '/messages/send', templatesPath = '/templates?status=APPROVED', sendTemplatePath = '/messages/send-template' }) {
+  const [numbers] = useLoad(numbersPath)
   const [kind, setKind] = useState('free')
   return (<div className="page">
     <PageHeader icon={Send} title="Send Message" subtitle="Send a free-form message or an approved template">
@@ -193,13 +193,13 @@ export function SendMessage() {
         <button className={kind === 'tpl' ? 'on' : ''} onClick={() => setKind('tpl')}><FileText size={16} /> Template</button></div>
     </PageHeader>
     {kind === 'free' ? <div className="grid-2-1">
-      <Card title="Compose" icon={Send}><Composer numbers={numbers} /></Card>
+      <Card title="Compose" icon={Send}><Composer numbers={numbers} sendPath={sendPath} /></Card>
       <Card title="Good to know" icon={AlertCircle}><ul className="tips">
         <li><Clock size={16} /><span><b>24-hour window.</b> Free-form messages only reach customers who messaged you in the last 24 hours. Use a template otherwise.</span></li>
         <li><ImageIcon size={16} /><span><b>Images</b> must be JPEG/PNG (≤5 MB). Other files are sent as documents (≤100 MB).</span></li>
         <li><Zap size={16} /><span>Attachments are uploaded to Meta first, then sent by media ID.</span></li>
       </ul></Card>
-    </div> : <TemplateSender numbers={numbers} />}
+    </div> : <TemplateSender numbers={numbers} templatesPath={templatesPath} sendPath={sendTemplatePath} />}
   </div>)
 }
 
@@ -225,6 +225,7 @@ export function Chat({ ep = ADMIN_EP }) {
   const [numbers] = useLoad(ep.numbers)
   const [filter, setFilter] = useState('')
   const [convs, setConvs] = useState(null); const [sel, setSel] = useState(null); const [msgs, setMsgs] = useState(null)
+  const [inWindow, setInWindow] = useState(true)
   const [search, setSearch] = useState(''); const [newTo, setNewTo] = useState(''); const [showNew, setShowNew] = useState(false); const [takeBusy, setTakeBusy] = useState(false)
   const toast = useToast()
   const lastSeen = useRef({ id: 0, upd: null }); const msgsRef = useRef()
@@ -242,7 +243,13 @@ export function Chat({ ep = ADMIN_EP }) {
     if (!sel) return
     const { phone_number_id: pn, contact_wa_id: contact } = sel
     api(`${ep.thread}?phone_number_id=${pn}&contact=${encodeURIComponent(contact)}`)
-      .then((r) => setMsgs(Array.isArray(r) ? r : (r?.messages || []))).catch(() => {})
+      .then((r) => {
+        if (Array.isArray(r)) { setMsgs(r); setInWindow(true) }
+        else {
+          setMsgs(r?.messages || [])
+          setInWindow(typeof r?.in_window === 'boolean' ? r.in_window : true)
+        }
+      }).catch(() => {})
   }, [sel?.phone_number_id, sel?.contact_wa_id, ep.thread])
   useEffect(() => { loadConvs() }, [loadConvs])
   useEffect(() => { setMsgs(null); loadThread() }, [loadThread])
@@ -308,7 +315,13 @@ export function Chat({ ep = ADMIN_EP }) {
           </header>
         <div className="msgs" ref={msgsRef}>{msgs === null ? <div className="center-pad"><Skeleton w="40%" h={36} /><Skeleton w="55%" h={36} style={{ alignSelf: 'flex-end' }} /></div>
           : msgs.map((m) => <Bubble key={m.id} m={m} />)}</div>
-        <Composer compact sendPath={ep.send} numbers={numbers} fixedNumber={sel.phone_number_id} fixedTo={sel.contact_wa_id} onSent={() => { loadThread(); loadConvs() }} />
+        {(!inWindow && ep.sendTemplate) ? (
+          <TemplateSender compact numbers={numbers} fixedNumber={sel.phone_number_id} fixedTo={sel.contact_wa_id}
+            templatesPath={ep.templates || '/templates?status=APPROVED'} sendPath={ep.sendTemplate}
+            onSent={() => { loadThread(); loadConvs() }} />
+        ) : (
+          <Composer compact sendPath={ep.send} numbers={numbers} fixedNumber={sel.phone_number_id} fixedTo={sel.contact_wa_id} onSent={() => { loadThread(); loadConvs() }} />
+        )}
       </>) : <div className="thread-empty"><span className="te-ico"><MessageCircle size={40} /></span><h3>WhatsApp Business Inbox</h3><p>Select a conversation to read and reply.<br />New messages arrive automatically every few seconds.</p></div>}
     </section>
   </div>)

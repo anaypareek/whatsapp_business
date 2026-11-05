@@ -8,7 +8,7 @@ import { Spinner, Card, PageHeader, Skeleton, Empty, Badge, useLoad, TableSkelet
 import { TestSendModal } from './templates'
 import Login from './Login'
 import { ApiKeysPage, UseViaApiModal } from './apikeys'
-import { Chat } from './pages'
+import { Chat, SendMessage } from './pages'
 import { UsageBilling, DueBadge } from './billing'
 import { ClientAiUsage } from './ai-usage'
 import { Flows } from './flows'
@@ -17,7 +17,7 @@ import { NavLink } from './editor-tools'
 import { Instagram } from './instagram'
 import { NumberRequestsPage, TemplateRequestsPage, StatsSection, TemplateDetail } from './portal-extra'
 
-const EP = { numbers: '/client/numbers', conversations: '/client/conversations', thread: '/client/messages/thread', poll: '/client/messages/poll', send: '/client/messages/send', takeover: '/client/conversations/takeover', release: '/client/conversations/release' }
+const EP = { numbers: '/client/numbers', conversations: '/client/conversations', thread: '/client/messages/thread', poll: '/client/messages/poll', send: '/client/messages/send', sendTemplate: '/client/messages/send-template', templates: '/client/templates', takeover: '/client/conversations/takeover', release: '/client/conversations/release' }
 
 function Home({ me, go }) {
   const [d, setD] = useState(null)
@@ -35,6 +35,7 @@ function Home({ me, go }) {
     </div>
     <Card title="Get started" icon={MessageCircle}><div className="quick">
       <button onClick={() => go('chats')}><MessagesSquare size={18} /><span>Open chats</span></button>
+      <button onClick={() => go('send')}><Send size={18} /><span>Send message</span></button>
       <button onClick={() => go('numbers')}><Phone size={18} /><span>My numbers</span></button>
       <button onClick={() => go('templates')}><FileText size={18} /><span>My templates</span></button>
       <button onClick={() => go('number-requests')}><PhoneCall size={18} /><span>Request a number</span></button>
@@ -68,7 +69,7 @@ function MyTemplates() {
     {apiFor && <UseViaApiModal template={apiFor} numbersPath="/client/numbers" keysHref="/developer" onClose={() => setApiFor(null)} />}</div>)
 }
 
-const NAV = [['dashboard', 'Dashboard', LayoutDashboard], ['chats', 'Chats', MessagesSquare], ['numbers', 'My numbers', Phone], ['templates', 'My templates', FileText], ['flows', 'Automation flows', Workflow], ['greeting', 'Greeting & groups', Hand], ['button-replies', 'Button replies', MousePointerClick], ['instagram', 'Instagram', Camera], ['train-ai', 'Train AI', GraduationCap],
+const NAV = [['dashboard', 'Dashboard', LayoutDashboard], ['chats', 'Chats', MessagesSquare], ['send', 'Send Message', Send], ['numbers', 'My numbers', Phone], ['templates', 'My templates', FileText], ['flows', 'Automation flows', Workflow], ['greeting', 'Greeting & groups', Hand], ['button-replies', 'Button replies', MousePointerClick], ['instagram', 'Instagram', Camera], ['train-ai', 'Train AI', GraduationCap],
   ['number-requests', 'Number requests', PhoneCall], ['template-requests', 'Template requests', ClipboardList], ['billing', 'Usage & billing', IndianRupee], ['ai-usage', 'AI usage', Sparkles], ['developer', 'API keys', KeyRound]]
 const DETAIL = /^template-stats\/(\d+)$/
 
@@ -103,7 +104,7 @@ export default function PortalApp() {
         </div></div>
       </header>
       <main className={`main ${tab === 'chats' ? 'main-chat' : ''}`}>
-        {tab === 'dashboard' && <Home me={me} go={go} />}{tab === 'chats' && <Chat ep={EP} />}{tab === 'numbers' && <MyNumbers />}{tab === 'templates' && <MyTemplates />}{tab === 'developer' && <ApiKeysPage scope="client" />}{tab === 'billing' && <UsageBilling />}{tab === 'ai-usage' && <ClientAiUsage />}{tab === 'flows' && <Flows scope="client" />}{tab === 'greeting' && <div className="page"><PageHeader icon={Hand} title="Greeting & groups" subtitle="Welcome message, off-hours reply and contact groups for your numbers (off until you enable it)" /><Greetings scope="client" /></div>}{tab === 'instagram' && <Instagram scope="client" />}{tab === 'train-ai' && <TrainAi scope="client" />}{tab === 'button-replies' && <div className="page"><ButtonReplies scope="client" /></div>}
+        {tab === 'dashboard' && <Home me={me} go={go} />}{tab === 'chats' && <Chat ep={EP} />}{tab === 'send' && <SendMessage numbersPath="/client/numbers" sendPath="/client/messages/send" templatesPath="/client/templates" sendTemplatePath="/client/messages/send-template" />}{tab === 'numbers' && <MyNumbers />}{tab === 'templates' && <MyTemplates />}{tab === 'developer' && <ApiKeysPage scope="client" />}{tab === 'billing' && <UsageBilling />}{tab === 'ai-usage' && <ClientAiUsage />}{tab === 'flows' && <Flows scope="client" />}{tab === 'greeting' && <div className="page"><PageHeader icon={Hand} title="Greeting & groups" subtitle="Welcome message, off-hours reply and contact groups for your numbers (off until you enable it)" /><Greetings scope="client" /></div>}{tab === 'instagram' && <Instagram scope="client" />}{tab === 'train-ai' && <TrainAi scope="client" />}{tab === 'button-replies' && <div className="page"><ButtonReplies scope="client" /></div>}
         {tab === 'number-requests' && <NumberRequestsPage />}{tab === 'template-requests' && <TemplateRequestsPage />}{DETAIL.test(tab) && <TemplateDetail key={tab} id={tab.match(DETAIL)[1]} go={go} />}
       </main>
     </div>

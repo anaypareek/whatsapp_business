@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { renumber, insertVariable, placeholders, renderWa } from './wa-format'
 import { FormatToolbar } from './editor-tools'
 import { WabaHealthBanner, UseViaApiModal } from './apikeys'
-import { FileText, Plus, RefreshCw, Pencil, Trash2, Send, Search, X, Lock, Eye, History, Phone, Hash, Link2, Reply, PhoneCall, FlaskConical, Code2, CheckCircle2, AlertCircle, Briefcase } from 'lucide-react'
+import { FileText, Plus, RefreshCw, Pencil, Trash2, Send, Search, X, Lock, Eye, History, Phone, Hash, Link2, Reply, PhoneCall, FlaskConical, Code2, CheckCircle2, AlertCircle, Briefcase, Clock } from 'lucide-react'
 import { api, fmtTime } from './api'
 import { ClientSelect } from './clients'
 import { Button, Card, PageHeader, Field, TableSkeleton, Empty, Modal, Spinner, Badge as UiBadge, useToast } from './ui'
@@ -263,33 +263,45 @@ export function Templates() {
   </div>)
 }
 
-export function TemplateSender({ numbers }) {
-  const [tpls, setTpls] = useState(null); const [from, setFrom] = useState(''); const [to, setTo] = useState('')
+export function TemplateSender({ numbers, templatesPath = '/templates?status=APPROVED', sendPath = '/messages/send-template', fixedNumber, fixedTo, compact, onSent }) {
+  const [tpls, setTpls] = useState(null); const [from, setFrom] = useState(fixedNumber != null ? String(fixedNumber) : ''); const [to, setTo] = useState(fixedTo || '')
   const [tid, setTid] = useState(''); const [vals, setVals] = useState([]); const [hv, setHv] = useState(''); const [bv, setBv] = useState({})
   const [busy, setBusy] = useState(false); const toast = useToast()
-  useEffect(() => { api('/templates?status=APPROVED').then(setTpls).catch(() => setTpls([])) }, [])
+  useEffect(() => { api(templatesPath).then((r) => setTpls(Array.isArray(r) ? r : (r?.data || []))).catch(() => setTpls([])) }, [templatesPath])
+  useEffect(() => { if (fixedNumber != null) setFrom(String(fixedNumber)) }, [fixedNumber])
+  useEffect(() => { if (fixedTo != null) setTo(String(fixedTo)) }, [fixedTo])
   const t = (tpls || []).find((x) => String(x.id) === String(tid))
   const form = t ? toForm(t) : null
   const urlBtns = form ? form.buttons.map((b, i) => [b, i]).filter(([b]) => b.type === 'URL' && countVars(b.url) > 0) : []
   const send = async (e) => {
     e.preventDefault(); setBusy(true)
-    try { const m = await api('/messages/send-template', { method: 'POST', body: { phone_number_id: from, to, template_id: tid, params: vals.slice(0, t?.body_variable_count || 0), header_param: hv || null, button_params: bv } }); toast.success(`Template sent${m.wamid ? '' : ` (${m.status})`}`) }
-    catch (e) { toast.error(e.message) } finally { setBusy(false) }
+    try {
+      const m = await api(sendPath, { method: 'POST', body: { phone_number_id: fixedNumber ?? from, to: fixedTo ?? to, template_id: tid, params: vals.slice(0, t?.body_variable_count || 0), header_param: hv || null, button_params: bv } })
+      toast.success(`Template sent${m.wamid ? '' : ` (${m.status})`}`); onSent?.(m)
+    } catch (e) { toast.error(e.message) } finally { setBusy(false) }
   }
-  // local-only: saves the client assignment in the portal DB, never calls Meta
-  const saveAssign = async () => {
-    setBusy(true)
-    try { await api(`/templates/${editing.id}/client`, { method: 'PUT', body: { client_id: clientId || null } }); onDone({ meta_submitted: false, assign_only: true }) }
-    catch (e) { toast.error(e.message) } finally { setBusy(false) }
-  }
+  if (compact) return (<form className="composer composer-tpl" onSubmit={send}>
+    <div className="alert warn composer-window"><Clock size={14} /><span>Outside the 24-hour messaging window — only an approved template can be sent to this customer.</span></div>
+    <div className="composer-row">
+      <select className="composer-input" value={tid} onChange={(e) => { setTid(e.target.value); setVals([]); setHv(''); setBv({}) }} required>
+        <option value="">{tpls === null ? 'Loading templates…' : (tpls.length ? 'Pick a template…' : 'No approved templates')}</option>
+        {(tpls || []).map((x) => <option key={x.id} value={x.id}>{x.name} ({x.language})</option>)}
+      </select>
+      <Button type="submit" variant="primary" className="send-btn" icon={Send} loading={busy} disabled={!t} />
+    </div>
+    {t && (t.header_variable_count > 0 || ['IMAGE', 'DOCUMENT', 'VIDEO'].includes(t.header_format)) &&
+      <input className="composer-input" style={{ marginTop: 6 }} placeholder={t.header_format === 'TEXT' ? 'Header {{1}}' : `Header ${String(t.header_format).toLowerCase()} URL`} value={hv} onChange={(e) => setHv(e.target.value)} required />}
+    {t && t.body_variable_count > 0 && <div className="composer-vars" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>{Array.from({ length: t.body_variable_count }, (_, i) =>
+      <input key={i} className="composer-input" style={{ flex: '1 1 120px' }} placeholder={`{{${i + 1}}}`} value={vals[i] || ''} onChange={(e) => { const v = [...vals]; v[i] = e.target.value; setVals(v) }} required />)}</div>}
+  </form>)
   return (<div className="grid-2-1">
     <Card title="Send template" icon={FileText}>
       <form className="form" onSubmit={send}>
         <div className="form-2">
-          <Field label="Sender number" icon={Phone}><select value={from} onChange={(e) => setFrom(e.target.value)} required><option value="">Select sender…</option>{numbers.map((n) => <option key={n.id} value={n.id}>{n.name ? `${n.name} — ` : ''}{n.display_number}</option>)}</select></Field>
-          <Field label="Recipient" icon={Hash}><input placeholder="919876543210" value={to} onChange={(e) => setTo(e.target.value)} required /></Field>
+          <Field label="Sender number" icon={Phone}><select value={from} onChange={(e) => setFrom(e.target.value)} required disabled={fixedNumber != null}><option value="">Select sender…</option>{numbers.map((n) => <option key={n.id} value={n.id}>{n.name ? `${n.name} — ` : ''}{n.display_number}</option>)}</select></Field>
+          <Field label="Recipient" icon={Hash}><input placeholder="919876543210" value={to} onChange={(e) => setTo(e.target.value)} required readOnly={fixedTo != null} /></Field>
         </div>
-        <Field label="Approved template" hint={tpls && !tpls.length ? 'No approved templates. Sync them in Template Master.' : null}>
+        <Field label="Approved template" hint={tpls && !tpls.length ? 'No approved templates yet.' : null}>
           <select value={tid} onChange={(e) => { setTid(e.target.value); setVals([]); setHv(''); setBv({}) }} required><option value="">{tpls === null ? 'Loading…' : 'Select template…'}</option>
             {(tpls || []).map((x) => <option key={x.id} value={x.id}>{x.name} ({x.language}) · {x.category}</option>)}</select></Field>
         {t && (t.header_variable_count > 0 || ['IMAGE', 'DOCUMENT', 'VIDEO'].includes(t.header_format)) &&

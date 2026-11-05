@@ -24,5 +24,7 @@ class AppServiceProvider extends ServiceProvider
         \Illuminate\Support\Facades\RateLimiter::for('chat-sync', fn ($r) => \Illuminate\Cache\RateLimiting\Limit::perMinute(30)->by($key($r)));
         \Illuminate\Support\Facades\RateLimiter::for('chat', fn ($r) => \Illuminate\Cache\RateLimiting\Limit::perMinute(90)->by($key($r)));
         \Illuminate\Support\Facades\RateLimiter::for('number-onboard', fn ($r) => \Illuminate\Cache\RateLimiting\Limit::perMinute(20)->by($key($r))); // Add number flow (create / request_code / verify_code)
+        // Client portal free-form + template send: 30/min per client (or IP if unauthenticated somehow).
+        \Illuminate\Support\Facades\RateLimiter::for('client-send', fn ($r) => \Illuminate\Cache\RateLimiting\Limit::perMinute(30)->by('cs:'.($r->user()?->getAuthIdentifier() ?? $r->ip())));
     }
 }

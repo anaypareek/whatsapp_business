@@ -94,19 +94,19 @@ class ClientTest extends TestCase
         $c = Client::create(['name' => 'Ravi', 'email' => 'r@c.t', 'password' => 'password123']);
         $mine = PhoneNumber::create(['client_id' => $c->id, 'phone_number_id' => '100', 'display_number' => '+91 100']);
         $other = PhoneNumber::create(['phone_number_id' => '200', 'display_number' => '+91 200']);
-        Message::create(['phone_number_id' => $mine->id, 'contact_wa_id' => '9101', 'direction' => 'in', 'body' => 'hi', 'status' => 'received']);
-        Message::create(['phone_number_id' => $other->id, 'contact_wa_id' => '9202', 'direction' => 'in', 'body' => 'secret', 'status' => 'received']);
+        Message::create(['phone_number_id' => $mine->id, 'contact_wa_id' => '919101000001', 'direction' => 'in', 'body' => 'hi', 'status' => 'received']);
+        Message::create(['phone_number_id' => $other->id, 'contact_wa_id' => '919202000002', 'direction' => 'in', 'body' => 'secret', 'status' => 'received']);
 
         $tok = $this->postJson('/api/client/auth/login', ['email' => 'r@c.t', 'password' => 'password123'])->assertOk()->json('token');
         $this->assertNotNull($c->fresh()->last_login_at);
         $this->app['auth']->forgetGuards();
         $h = fn () => $this->withToken($tok);
         $h()->getJson('/api/client/numbers')->assertJsonCount(1)->assertJsonPath('0.phone_number_id', '100');
-        $h()->getJson('/api/client/conversations')->assertJsonCount(1)->assertJsonPath('0.contact_wa_id', '9101');
+        $h()->getJson('/api/client/conversations')->assertJsonCount(1)->assertJsonPath('0.contact_wa_id', '919101000001');
         $h()->getJson('/api/client/dashboard')->assertJsonPath('numbers', 1)->assertJsonPath('total_received', 1)->assertJsonPath('unread', 1);
-        $h()->getJson("/api/client/messages/thread?phone_number_id={$mine->id}&contact=9101")->assertJsonCount(1, 'messages')->assertJsonPath('taken_over', false);
-        $h()->getJson("/api/client/messages/thread?phone_number_id={$other->id}&contact=9202")->assertNotFound();
-        $h()->postJson('/api/client/messages/send', ['phone_number_id' => $mine->id, 'to' => '9101000000', 'text' => 'Hello'])->assertCreated()->assertJsonPath('source', 'client');
+        $h()->getJson("/api/client/messages/thread?phone_number_id={$mine->id}&contact=919101000001")->assertJsonCount(1, 'messages')->assertJsonPath('taken_over', false)->assertJsonPath('in_window', true);
+        $h()->getJson("/api/client/messages/thread?phone_number_id={$other->id}&contact=919202000002")->assertNotFound();
+        $h()->postJson('/api/client/messages/send', ['phone_number_id' => $mine->id, 'to' => '919101000001', 'text' => 'Hello'])->assertCreated()->assertJsonPath('source', 'manual');
         Http::assertSent(fn (HttpRequest $r) => str_contains($r->url(), '/100/messages'));
         $h()->postJson('/api/client/messages/send', ['phone_number_id' => $other->id, 'to' => '9202000000', 'text' => 'x'])->assertNotFound();
 
