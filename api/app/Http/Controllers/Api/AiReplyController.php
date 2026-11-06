@@ -30,7 +30,6 @@ class AiReplyController extends Controller
             'defaults' => [
                 'handoff_text' => AiReplyService::HANDOFF_TEXT,
                 'handoff_text_hi' => AiReplyService::HANDOFF_TEXT_HI,
-                'human_active_quiet_minutes' => 30,
             ],
             'numbers' => $nums->map(fn ($n) => ['phone_number' => $n, 'settings' => $saved[$n->id] ?? new AiReplySetting(['phone_number_id' => $n->id]), 'handoffs' => $handoffs[$n->id] ?? []])];
     }

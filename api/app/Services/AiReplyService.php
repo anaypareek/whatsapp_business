@@ -18,9 +18,10 @@ use Throwable;
  *
  * Handoff: first unanswered question sends a fixed connecting message + one FCM push and sets needs_human.
  * During handoff_cooldown_hours the AI may still answer known questions from KB; a second handoff stays silent
- * (records Unanswered, no re-push). Human outbound in the last human_active_quiet_minutes keeps AI quiet.
- * Manual takeover (taken_over): AI is fully silent including trained answers; WebhookProcessor also skips
- * keyword/greeting/flow/button auto-replies for that chat until "Give to AI" releases it.
+ * (records Unanswered, no re-push). Inbound text, template quick-reply taps (type=button) and interactive
+ * button_reply/list_reply titles are eligible when no higher-priority rule already answered.
+ * Manual takeover (taken_over) is the only per-chat silence: AI (and WebhookProcessor keyword/greeting/flow/
+ * button auto-replies) stay off until "Give to AI". There is no implicit quiet window after manual/template outbound.
  */
 class AiReplyService
 {
@@ -53,7 +54,9 @@ class AiReplyService
         if (! $s || ! $s->enabled) return 'disabled';
         // manual takeover: AI fully silent (trained answers included); WebhookProcessor also skips keywords/greeting/flows/buttons
         if (AiContactState::isTakenOver((int) $phone->id, (string) $in->contact_wa_id)) return 'taken_over';
-        if ($in->direction !== 'in' || $in->is_auto || $in->type !== 'text' || trim((string) $in->body) === '') return 'not_text';
+        // text + template quick-reply (button) + interactive button_reply/list_reply (body already extracted by webhook)
+        $eligible = in_array($in->type, ['text', 'button', 'interactive'], true);
+        if ($in->direction !== 'in' || $in->is_auto || ! $eligible || trim((string) $in->body) === '') return 'not_text';
         $from = preg_replace('/\D/', '', (string) $in->contact_wa_id);
         // loop prevention: never answer our own / another business number
         $own = PhoneNumber::pluck('display_number')->map(fn ($d) => preg_replace('/\D/', '', (string) $d))->filter()->all();
@@ -62,8 +65,6 @@ class AiReplyService
         // 24h customer service window: the inbound itself must be recent (Meta retries / backfills of old messages are skipped)
         if ($in->created_at && $in->created_at->lt(now()->subHours(24))) return 'outside_window';
         if (! static::config()['key']) return 'no_api_key';
-        // human actively chatting: stay quiet for N minutes after any non-auto outbound
-        if ($this->humanRecentlyActive($phone, $in, $s)) return 'human_active';
         // needs_human no longer hard-skips: smart continue still calls the model during the cooldown
         $conv = Message::where('phone_number_id', $phone->id)->where('contact_wa_id', $in->contact_wa_id)->where('direction', 'out')->where('source', 'ai');
         if ((clone $conv)->where('created_at', '>=', now()->subHour())->count() >= max(1, $s->max_per_hour)) return 'rate_limit_contact';
@@ -72,15 +73,13 @@ class AiReplyService
         return null;
     }
 
-    /** True when a staff/manual outbound was sent to this contact in the quiet window. */
+    /**
+     * Legacy no-op. The human-active quiet window was removed: AI answers immediately after
+     * manual/template/API outbound unless the chat is explicitly taken over. Column retained.
+     */
     public function humanRecentlyActive(PhoneNumber $phone, Message $in, ?AiReplySetting $s = null): bool
     {
-        $s ??= AiReplySetting::where('phone_number_id', $phone->id)->first();
-        $mins = max(0, (int) ($s->human_active_quiet_minutes ?? 30));
-        if ($mins <= 0) return false;
-        return Message::where('phone_number_id', $phone->id)->where('contact_wa_id', $in->contact_wa_id)
-            ->where('direction', 'out')->where('is_auto', false)
-            ->where('created_at', '>=', now()->subMinutes($mins))->exists();
+        return false;
     }
 
     /** True while needs_human is set and handoff_at is still inside the cooldown window. */

@@ -251,17 +251,92 @@ class AiReplyTest extends TestCase
         $this->assertSame(['Team se connect kar rahe hain, wait karein 🙏', 'Connecting you now, please wait.'], $this->sent());
     }
 
-    public function test_human_active_keeps_ai_quiet(): void
+    public function test_ai_replies_immediately_after_manual_or_template_outbound(): void
     {
-        $this->enable(['human_active_quiet_minutes' => 30]);
+        $this->enable();
         $this->aiAnswer = 'Hi! 😊';
         $this->text('hello')->assertJsonPath('ai', 1);
         app(\App\Services\MessagingService::class)->send($this->n, self::FROM, 'Staff here', source: 'manual');
-        $this->text('are you there?')->assertJsonPath('ai', 0);
-        $this->assertSame(1, Message::where('source', 'ai')->count());
-        Carbon::setTestNow(now()->addMinutes(31));
-        $this->text('hello again')->assertJsonPath('ai', 1);
+        $this->text('are you there?')->assertJsonPath('ai', 1);
         $this->assertSame(2, Message::where('source', 'ai')->count());
+        // template outbound (is_auto=false) also must not suppress AI
+        Message::create([
+            'phone_number_id' => $this->n->id, 'contact_wa_id' => self::FROM, 'direction' => 'out',
+            'type' => 'template', 'body' => 'Campaign', 'status' => 'sent', 'source' => 'manual', 'is_auto' => false,
+            'wamid' => 'wamid.TPL1',
+        ]);
+        $this->text('about the offer?')->assertJsonPath('ai', 1);
+        $this->assertSame(3, Message::where('source', 'ai')->count());
+        // legacy helper is a no-op
+        $in = Message::where('direction', 'in')->latest('id')->first();
+        $this->assertFalse(app(\App\Services\AiReplyService::class)->humanRecentlyActive($this->n, $in));
+    }
+
+    public function test_template_button_and_interactive_reach_ai_when_no_higher_rule(): void
+    {
+        $this->enable();
+        $this->aiAnswer = 'Got your choice! 😊';
+        // template quick-reply (type=button)
+        $this->seq++;
+        $this->hook([
+            'contacts' => [['profile' => ['name' => 'Ravi'], 'wa_id' => self::FROM]],
+            'messages' => [[
+                'from' => self::FROM, 'id' => 'wamid.BTN'.$this->seq, 'timestamp' => (string) now()->timestamp,
+                'type' => 'button', 'button' => ['text' => 'Yes please', 'payload' => 'Yes please'],
+            ]],
+        ])->assertOk()->assertJsonPath('ai', 1)->assertJsonPath('button_replies', 0);
+        $this->assertSame(['Got your choice! 😊'], $this->sent());
+        // interactive button_reply
+        $this->seq++;
+        $this->hook([
+            'contacts' => [['profile' => ['name' => 'Ravi'], 'wa_id' => self::FROM]],
+            'messages' => [[
+                'from' => self::FROM, 'id' => 'wamid.IBR'.$this->seq, 'timestamp' => (string) now()->timestamp,
+                'type' => 'interactive',
+                'interactive' => ['type' => 'button_reply', 'button_reply' => ['id' => 'opt1', 'title' => 'Option A']],
+            ]],
+        ])->assertOk()->assertJsonPath('ai', 1);
+        // interactive list_reply
+        $this->seq++;
+        $this->hook([
+            'contacts' => [['profile' => ['name' => 'Ravi'], 'wa_id' => self::FROM]],
+            'messages' => [[
+                'from' => self::FROM, 'id' => 'wamid.ILR'.$this->seq, 'timestamp' => (string) now()->timestamp,
+                'type' => 'interactive',
+                'interactive' => ['type' => 'list_reply', 'list_reply' => ['id' => 'row1', 'title' => 'Row One']],
+            ]],
+        ])->assertOk()->assertJsonPath('ai', 1);
+        $this->assertSame(3, Message::where('source', 'ai')->count());
+        // configured button reply still wins over AI (priority)
+        \App\Models\MessageTemplate::create([
+            'meta_id' => 'M1', 'waba_id' => '999', 'name' => 'ask_confirm', 'language' => 'en_US',
+            'category' => 'UTILITY', 'status' => 'APPROVED', 'client_id' => $this->c->id,
+            'components' => [['type' => 'BODY', 'text' => 'Confirm?'], ['type' => 'BUTTONS', 'buttons' => [
+                ['type' => 'QUICK_REPLY', 'text' => 'Confirm'], ['type' => 'QUICK_REPLY', 'text' => 'Cancel'],
+            ]]],
+        ]);
+        $tpl = \App\Models\MessageTemplate::where('name', 'ask_confirm')->first();
+        Message::create([
+            'phone_number_id' => $this->n->id, 'contact_wa_id' => self::FROM, 'direction' => 'out',
+            'type' => 'template', 'message_template_id' => $tpl->id, 'template_name' => $tpl->name,
+            'wamid' => 'wamid.CTX1', 'status' => 'delivered', 'source' => 'manual',
+        ]);
+        \App\Models\TemplateButtonReply::create([
+            'message_template_id' => $tpl->id, 'button_index' => 0, 'button_text' => 'Confirm',
+            'reply_type' => 'text', 'text' => 'Confirmed, thanks!',
+        ]);
+        $beforeAi = Message::where('source', 'ai')->count();
+        $this->seq++;
+        $this->hook([
+            'contacts' => [['profile' => ['name' => 'Ravi'], 'wa_id' => self::FROM]],
+            'messages' => [[
+                'from' => self::FROM, 'id' => 'wamid.BTNCFG'.$this->seq, 'timestamp' => (string) now()->timestamp,
+                'type' => 'button', 'button' => ['text' => 'Confirm', 'payload' => 'Confirm'],
+                'context' => ['from' => '919090900894', 'id' => 'wamid.CTX1'],
+            ]],
+        ])->assertOk()->assertJsonPath('button_replies', 1)->assertJsonPath('ai', 0);
+        $this->assertSame($beforeAi, Message::where('source', 'ai')->count());
+        $this->assertContains('Confirmed, thanks!', $this->sent());
     }
 
     public function test_provider_failure_is_graceful_and_key_never_exposed(): void

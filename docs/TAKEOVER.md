@@ -10,6 +10,8 @@ While `ai_contact_states.taken_over` is true:
 
 **Give to AI** (`release`) sets `taken_over=false` and clears `needs_human` / `handoff_at` / `reason` so the AI resumes normally on the next inbound.
 
+There is **no implicit quiet window** after a manual, template, or API outbound. AI (and other automatic replies) keep answering immediately after those sends; use **Take over** when a human needs exclusive control of the chat.
+
 ## API
 
 | Who | Take over | Give to AI |
