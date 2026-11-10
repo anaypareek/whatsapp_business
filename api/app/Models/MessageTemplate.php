@@ -66,7 +66,11 @@ class MessageTemplate extends Model
         preg_match_all('/\{\{\s*(\d+)\s*\}\}/', (string) $text, $m);
         return $m[1] ? max(array_map('intval', $m[1])) : 0;
     }
-    public function getBodyVariableCountAttribute(): int { return self::countVars($this->component('BODY')['text'] ?? null); }
+    public function getBodyVariableCountAttribute(): int
+    {
+        if (strtoupper((string) $this->category) === 'AUTHENTICATION') return 1;
+        return self::countVars($this->component('BODY')['text'] ?? null);
+    }
     public function getHeaderFormatAttribute(): ?string { return $this->component('HEADER')['format'] ?? null; }
     public function getHeaderVariableCountAttribute(): int
     {

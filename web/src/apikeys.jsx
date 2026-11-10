@@ -20,12 +20,16 @@ export function snippets({ template: t, number, base = location.origin }) {
   const head = comps.find((c) => c.type === 'HEADER')
   const body = comps.find((c) => c.type === 'BODY')
   const btns = comps.find((c) => c.type === 'BUTTONS')?.buttons || []
-  const n = Math.max(0, ...[...String(body?.text || '').matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((m) => +m[1]))
+  const isAuth = (t.category || '').toUpperCase() === 'AUTHENTICATION'
+  const n = isAuth ? 1 : Math.max(0, ...[...String(body?.text || '').matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((m) => +m[1]))
   const ex = body?.example?.body_text?.[0] || []
-  const variables = { body: Array.from({ length: n }, (_, i) => ex[i] || `value_${i + 1}`) }
+  const variables = { body: Array.from({ length: n }, (_, i) => ex[i] || (isAuth ? '123456' : `value_${i + 1}`)) }
   if (head && head.format === 'TEXT' && /\{\{\s*1\s*\}\}/.test(head.text || '')) variables.header = head.example?.header_text?.[0] || 'header_value'
   else if (head && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(head.format)) variables.header = `https://example.com/file.${head.format === 'IMAGE' ? 'jpg' : head.format === 'VIDEO' ? 'mp4' : 'pdf'}`
-  if (btns.some((b) => b.type === 'URL' && /\{\{/.test(b.url || '') || b.type === 'OTP')) variables.buttons = btns.map((b) => (b.type === 'URL' && /\{\{/.test(b.url || '')) || b.type === 'OTP' ? 'button_value' : null)
+  if (isAuth || btns.some((b) => b.type === 'URL' && /\{\{/.test(b.url || '') || b.type === 'OTP')) {
+    variables.buttons = isAuth ? btns.map((b, i) => (i === 0 || b.type === 'OTP' ? (ex[0] || '123456') : null)) : btns.map((b) => (b.type === 'URL' && /\{\{/.test(b.url || '')) || b.type === 'OTP' ? 'button_value' : null)
+    if (isAuth && !variables.buttons.length) variables.buttons = ['123456']
+  }
   const payload = { from_number_id: number?.phone_number_id || '<from_number_id>', to: '919812345678', template: t.name, language: t.language, variables }
   const json = JSON.stringify(payload, null, 2)
   const url = `${base}/api/v1/templates/send`

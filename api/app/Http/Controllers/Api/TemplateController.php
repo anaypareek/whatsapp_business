@@ -42,7 +42,7 @@ class TemplateController extends Controller
         $components = TemplateBuilder::components($d);
         try {
             $components = \App\Services\TemplateSamples::resolve($components, $d['header'] ?? null, $wa);
-            $res = $wa->createTemplate(['name' => $d['name'], 'language' => $d['language'], 'category' => $d['category'], 'components' => $components]);
+            $res = $wa->createTemplate(\App\Services\TemplateBuilder::metaPayload($d, $components));
         } catch (\Illuminate\Validation\ValidationException $e) { throw $e; }
         catch (Throwable $e) { return $this->fail($e); }
         $t = MessageTemplate::create([
@@ -64,6 +64,7 @@ class TemplateController extends Controller
             return response()->json(['message' => 'Meta does not allow changing a template\'s name or language. Create a new template instead.'], 422);
         }
         $payload = ['components' => TemplateBuilder::components($d)];
+        if (! empty($d['message_send_ttl_seconds'])) $payload['message_send_ttl_seconds'] = (int) $d['message_send_ttl_seconds'];
         if (! empty($d['header']['sample'])) {
             try { $payload['components'] = \App\Services\TemplateSamples::resolve($payload['components'], $d['header'], $wa); }
             catch (\Illuminate\Validation\ValidationException $e) { throw $e; }

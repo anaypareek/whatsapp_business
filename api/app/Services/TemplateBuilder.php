@@ -19,22 +19,42 @@ class TemplateBuilder
             'header.example' => 'nullable|string|max:1000', // text var example, or media header_handle
             'header.sample' => 'nullable|string|max:200', // stored media sample token (uploaded to Meta at submit time)
             'header.sample_name' => 'nullable|string|max:200',
-            'body' => 'required|array',
-            'body.text' => 'required|string|max:1024',
+            'body' => 'nullable|array',
+            'body.text' => 'nullable|required_unless:category,AUTHENTICATION|string|max:1024',
+            'body.add_security_recommendation' => 'nullable|boolean',
             'body.examples' => 'nullable|array',
             'body.examples.*' => 'nullable|string|max:500',
             'footer' => 'nullable|string|max:60',
+            'code_expiration_minutes' => 'nullable|integer|min:1|max:90',
+            'message_send_ttl_seconds' => 'nullable|integer|min:30|max:900',
             'buttons' => 'nullable|array|max:10',
-            'buttons.*.type' => 'required|in:QUICK_REPLY,URL,PHONE_NUMBER',
-            'buttons.*.text' => 'required|string|max:25',
+            'buttons.*.type' => 'required|in:QUICK_REPLY,URL,PHONE_NUMBER,OTP',
+            'buttons.*.text' => 'nullable|required_unless:buttons.*.type,OTP|string|max:25',
             'buttons.*.url' => 'nullable|required_if:buttons.*.type,URL|string|max:2000',
             'buttons.*.phone_number' => 'nullable|required_if:buttons.*.type,PHONE_NUMBER|string|max:20',
             'buttons.*.example' => 'nullable|string|max:2000',
+            'buttons.*.otp_type' => 'nullable|string|in:COPY_CODE,ONE_TAP,ZERO_TAP,copy_code,one_tap,zero_tap',
+            'buttons.*.autofill_text' => 'nullable|string|max:25',
+            'buttons.*.zero_tap_terms_accepted' => 'nullable|boolean',
+            'buttons.*.supported_apps' => 'nullable|array|max:5',
+            'buttons.*.supported_apps.*.package_name' => 'nullable|string|max:255',
+            'buttons.*.supported_apps.*.signature_hash' => 'nullable|string|max:32',
         ];
+    }
+
+    /** Top-level fields Meta accepts on create/edit, including optional auth TTL. */
+    public static function metaPayload(array $d, array $components): array
+    {
+        $p = ['name' => $d['name'], 'language' => $d['language'], 'category' => $d['category'], 'components' => $components];
+        if (! empty($d['message_send_ttl_seconds'])) $p['message_send_ttl_seconds'] = (int) $d['message_send_ttl_seconds'];
+        return $p;
     }
 
     public static function components(array $d): array
     {
+        if (strtoupper($d['category'] ?? '') === 'AUTHENTICATION') {
+            return self::authComponents($d);
+        }
         $errors = [];
         $out = [];
         $h = $d['header'] ?? null;
@@ -95,6 +115,77 @@ class TemplateBuilder
         return $out;
     }
 
+
+    /**
+     * Authentication templates use Meta's fixed content builder:
+     * no HEADER, BODY has no custom text (only optional add_security_recommendation),
+     * optional FOOTER with only code_expiration_minutes, and exactly one OTP button.
+     */
+    private static function authComponents(array $d): array
+    {
+        $errors = [];
+        $h = $d['header'] ?? null;
+        $fmt = strtoupper(is_array($h) ? ($h['format'] ?? 'NONE') : 'NONE');
+        if ($h && $fmt !== '' && $fmt !== 'NONE') {
+            $errors['header'] = 'AUTHENTICATION templates cannot have a header.';
+        }
+        // Custom BODY.text / FOOTER.text are stripped, never forwarded (Meta #100/2388042).
+        $btns = array_values($d['buttons'] ?? []);
+        if ($btns === []) {
+            $btns = [['type' => 'OTP', 'otp_type' => 'COPY_CODE']];
+        } elseif (count($btns) !== 1) {
+            $errors['buttons'] = 'AUTHENTICATION templates need exactly one OTP button (COPY_CODE, ONE_TAP, or ZERO_TAP).';
+        } elseif (strtoupper($btns[0]['type'] ?? '') !== 'OTP') {
+            $errors['buttons.0.type'] = 'AUTHENTICATION templates only support an OTP button, not quick replies, URLs, or phone numbers.';
+        }
+
+        $otp = [];
+        if (count($btns) === 1 && strtoupper($btns[0]['type'] ?? '') === 'OTP') {
+            $b = $btns[0];
+            $otpType = strtoupper($b['otp_type'] ?? 'COPY_CODE');
+            if (! in_array($otpType, ['COPY_CODE', 'ONE_TAP', 'ZERO_TAP'], true)) {
+                $errors['buttons.0.otp_type'] = 'OTP type must be COPY_CODE, ONE_TAP, or ZERO_TAP.';
+            }
+            $otp = ['type' => 'OTP', 'otp_type' => $otpType];
+            if (! empty($b['text'])) $otp['text'] = $b['text'];
+            if (in_array($otpType, ['ONE_TAP', 'ZERO_TAP'], true)) {
+                if (! empty($b['autofill_text'])) $otp['autofill_text'] = $b['autofill_text'];
+                $apps = [];
+                foreach ($b['supported_apps'] ?? [] as $i => $app) {
+                    $pkg = trim((string) ($app['package_name'] ?? ''));
+                    $hash = trim((string) ($app['signature_hash'] ?? ''));
+                    if ($pkg === '' && $hash === '') continue;
+                    if ($pkg === '' || ! preg_match('/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/', $pkg)) {
+                        $errors["buttons.0.supported_apps.$i.package_name"] = 'Each app needs an Android package name with at least two segments (e.g. com.example.app).';
+                    }
+                    if ($hash === '' || ! preg_match('/^[A-Za-z0-9+\/=_-]{8,20}$/', $hash)) {
+                        $errors["buttons.0.supported_apps.$i.signature_hash"] = 'Each app needs its 11-character signing key hash.';
+                    }
+                    if ($pkg && $hash) $apps[] = ['package_name' => $pkg, 'signature_hash' => $hash];
+                }
+                if (! $apps) $errors['buttons.0.supported_apps'] = ($otpType === 'ONE_TAP' ? 'ONE_TAP' : 'ZERO_TAP').' requires at least one supported app (package_name and signature_hash).';
+                else $otp['supported_apps'] = $apps;
+            }
+            if ($otpType === 'ZERO_TAP' && empty($b['zero_tap_terms_accepted'])) {
+                $errors['buttons.0.zero_tap_terms_accepted'] = 'ZERO_TAP requires accepting the zero-tap terms (zero_tap_terms_accepted = true).';
+            } elseif ($otpType === 'ZERO_TAP') {
+                $otp['zero_tap_terms_accepted'] = true;
+            }
+        }
+
+        if ($errors) throw ValidationException::withMessages($errors);
+
+        $body = ['type' => 'BODY'];
+        // Never include `text` — Meta error #100/2388042 rejects it on AUTHENTICATION bodies.
+        if (! empty($d['body']['add_security_recommendation'])) $body['add_security_recommendation'] = true;
+        $out = [$body];
+        if (! empty($d['code_expiration_minutes'])) {
+            $out[] = ['type' => 'FOOTER', 'code_expiration_minutes' => (int) $d['code_expiration_minutes']];
+        }
+        $out[] = ['type' => 'BUTTONS', 'buttons' => [$otp]];
+        return $out;
+    }
+
     /** Build send-time components from parameters. */
     /** Variable names used in a text: ['1','2'] for positional {{n}}, ['first_name'] for Meta NAMED parameters. */
     public static function vars(?string $text): array
@@ -112,6 +203,19 @@ class TemplateBuilder
     {
         $errors = [];
         $out = [];
+        if (strtoupper((string) $t->category) === 'AUTHENTICATION') {
+            $vals = array_values($bodyParams);
+            $code = $bodyParams['code'] ?? ($vals[0] ?? null);
+            if ($code === null || $code === '') throw ValidationException::withMessages(['params' => "Template '{$t->name}' needs a verification code."]);
+            $code = (string) $code;
+            $out[] = ['type' => 'body', 'parameters' => [['type' => 'text', 'text' => $code]]];
+            if ($t->component('BUTTONS')['buttons'] ?? []) {
+                $v = $buttonParams[0] ?? $buttonParams['0'] ?? $code;
+                if ($v === null || $v === '') $v = $code;
+                $out[] = ['type' => 'button', 'sub_type' => 'url', 'index' => '0', 'parameters' => [['type' => 'text', 'text' => (string) $v]]];
+            }
+            return $out;
+        }
         $fmt = $t->header_format;
         $htext = $t->component('HEADER')['text'] ?? '';
         if ($fmt === 'TEXT' && ($t->header_variable_count > 0 || self::isNamed($htext))) {
@@ -166,20 +270,21 @@ class TemplateBuilder
         $header = null;
         if ($fmt === 'TEXT' && ($t->header_variable_count > 0 || self::isNamed($t->component('HEADER')['text'] ?? ''))) $header = 'Demo';
         elseif (in_array($fmt, ['IMAGE', 'VIDEO', 'DOCUMENT'])) $header = $media[strtolower($fmt)] ?? null;
-        $auth = $t->category === 'AUTHENTICATION';
+        $auth = strtoupper((string) $t->category) === 'AUTHENTICATION';
         $btext = $t->component('BODY')['text'] ?? '';
         if (self::isNamed($btext)) {
             $body = [];
             foreach (self::vars($btext) as $n) $body[$n] = $auth ? '123456' : ucfirst(str_replace('_', ' ', $n));
         } else {
-            $body = $t->body_variable_count ? array_map(fn ($i) => $auth ? '123456' : "Demo $i", range(1, $t->body_variable_count)) : [];
+            $n = $auth ? max(1, $t->body_variable_count) : $t->body_variable_count;
+            $body = $n ? array_map(fn ($i) => $auth ? '123456' : "Demo $i", range(1, $n)) : [];
         }
         $buttons = [];
         foreach ($t->component('BUTTONS')['buttons'] ?? [] as $i => $b) {
             $type = strtoupper($b['type'] ?? '');
-            if ($type === 'URL' && MessageTemplate::countVars($b['url'] ?? '') > 0) $buttons[$i] = 'demo';
-            elseif ($type === 'OTP') $buttons[$i] = '123456';
-            elseif ($type === 'COPY_CODE') $buttons[$i] = 'DEMO10';
+            if ($type === 'URL' && MessageTemplate::countVars($b['url'] ?? '') > 0) $buttons[$i] = $auth ? '123456' : 'demo';
+            elseif ($type === 'OTP' || ($auth && $type === 'URL')) $buttons[$i] = '123456';
+            elseif ($type === 'COPY_CODE') $buttons[$i] = $auth ? '123456' : 'DEMO10';
         }
         return ['header' => $header, 'body' => $body, 'buttons' => $buttons];
     }
@@ -187,6 +292,23 @@ class TemplateBuilder
     public static function render(MessageTemplate $t, array $bodyParams, ?string $headerParam = null): string
     {
         $fill = fn ($s, $p) => preg_replace_callback('/\{\{\s*([A-Za-z0-9_]+)\s*\}\}/', fn ($m) => ctype_digit($m[1]) ? ($p[(int) $m[1] - 1] ?? $m[0]) : ($p[$m[1]] ?? $m[0]), (string) $s);
+        if (strtoupper((string) $t->category) === 'AUTHENTICATION') {
+            $bt = $t->component('BODY')['text'] ?? '';
+            $codeParams = self::isNamed($bt) ? $bodyParams : array_values($bodyParams);
+            if ($bt !== '') {
+                $parts = [$fill($bt, $codeParams)];
+            } else {
+                $code = $codeParams[0] ?? '{{1}}';
+                $txt = $code.' is your verification code.';
+                if (! empty($t->component('BODY')['add_security_recommendation'])) $txt .= ' For your security, do not share this code.';
+                $parts = [$txt];
+            }
+            $mins = $t->component('FOOTER')['code_expiration_minutes'] ?? null;
+            $ft = $t->component('FOOTER')['text'] ?? null;
+            if ($mins) $parts[] = '_This code expires in '.$mins.' minutes._';
+            elseif ($ft) $parts[] = "_{$ft}_";
+            return implode("\n", $parts);
+        }
         $parts = [];
         if ($t->header_format === 'TEXT') $parts[] = '*'.$fill($t->component('HEADER')['text'] ?? '', [$headerParam]).'*';
         $bt = $t->component('BODY')['text'] ?? '';

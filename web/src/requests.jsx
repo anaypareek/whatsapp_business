@@ -3,17 +3,11 @@ import { useState } from 'react'
 import { PhoneCall, FileText, Check, X, Search, Eye, Pencil, RotateCw, AlertTriangle, KeyRound, Hash } from 'lucide-react'
 import { api, fmtTime } from './api'
 import { Button, Card, PageHeader, Field, TableSkeleton, Empty, Badge, useToast, useLoad, Modal } from './ui'
-import { Preview, TemplateForm } from './templates'
+import { Preview, TemplateForm, requestToForm } from './templates'
 
 export const REQ_STATUSES = ['pending', 'approved', 'rejected']
 /** Stored request (name/language/category + builder form) -> builder form object. */
-export const reqToForm = (r) => ({
-  name: r.name, language: r.language, category: r.category,
-  header: r.form?.header ? { format: r.form.header.format || 'NONE', text: r.form.header.text || '', example: r.form.header.example || '' } : { format: 'NONE', text: '', example: '' },
-  body: { text: r.form?.body?.text || '', examples: r.form?.body?.examples || [] },
-  footer: r.form?.footer || '',
-  buttons: (r.form?.buttons || []).map((b) => ({ type: b.type, text: b.text || '', url: b.url || '', phone_number: b.phone_number || '', example: b.example || '' })),
-})
+export const reqToForm = requestToForm
 
 export const RegBadge = ({ s }) => s ? <Badge tone={s === 'registered' ? 'green' : 'red'}>{s === 'registered' ? 'Registered on Meta' : 'Registration failed'}</Badge> : null
 

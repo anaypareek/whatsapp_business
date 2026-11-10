@@ -13,19 +13,35 @@ const fill = (s, vals) => (s || '').replace(/\{\{\s*(\d+)\s*\}\}/g, (m, n) => va
 const countVars = (s) => Math.max(0, ...[...(s || '').matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((m) => +m[1]))
 export const Badge = ({ s }) => <UiBadge s={s} />
 
+export const blankOtp = () => ({ type: 'OTP', otp_type: 'COPY_CODE', text: '', autofill_text: '', supported_apps: [{ package_name: '', signature_hash: '' }], zero_tap_terms_accepted: false })
+
+/** Meta's fixed authentication copy (not editable). */
+export function authPreview({ add_security_recommendation, code_expiration_minutes } = {}) {
+  let body = '{{1}} is your verification code.'
+  if (add_security_recommendation) body += ' For your security, do not share this code.'
+  const mins = code_expiration_minutes ? String(code_expiration_minutes).trim() : ''
+  const footer = mins ? `This code expires in ${mins} minutes.` : ''
+  return { body, footer }
+}
+
 /** WhatsApp-style preview from a form object {header, body, footer, buttons} with variable values. */
 export function Preview({ form, headerVal, bodyVals, buttonVals }) {
-  const h = form.header || {}
+  const isAuth = (form.category || '').toUpperCase() === 'AUTHENTICATION'
+  const fixed = isAuth ? authPreview({ add_security_recommendation: form.body?.add_security_recommendation, code_expiration_minutes: form.code_expiration_minutes }) : null
+  const h = isAuth ? { format: 'NONE' } : (form.header || {})
   const fmt = h.format || 'NONE'
+  const bodyText = isAuth ? fixed.body : form.body?.text
+  const footer = isAuth ? fixed.footer : form.footer
+  const buttons = isAuth ? [{ type: 'OTP', text: (form.buttons?.[0]?.otp_type === 'ONE_TAP' || form.buttons?.[0]?.otp_type === 'ZERO_TAP') ? (form.buttons?.[0]?.autofill_text || form.buttons?.[0]?.text || 'Autofill') : (form.buttons?.[0]?.text || 'Copy code') }] : (form.buttons || [])
   return (<div className="wa-preview"><div className="wa-preview-top"><span className="avatar sm">FO</span><b>Fineoutput</b></div><div className="wa-preview-body"><div className="bubble out tpl">
     {fmt === 'TEXT' && <div className="tpl-h">{fill(h.text, [headerVal ?? h.example])}</div>}
     {fmt === 'IMAGE' && (headerVal && /^https?:/.test(headerVal) ? <img src={headerVal} alt="" /> : <div className="tpl-media">🖼 Image</div>)}
     {fmt === 'VIDEO' && <div className="tpl-media">🎬 Video</div>}
     {fmt === 'DOCUMENT' && <div className="tpl-media">📄 Document</div>}
-    <div className="text">{renderWa(fill(form.body?.text, bodyVals ?? form.body?.examples)) || <span className="muted">Body text…</span>}</div>
-    {form.footer && <div className="tpl-f">{form.footer}</div>}
+    <div className="text">{renderWa(fill(bodyText, bodyVals ?? form.body?.examples)) || <span className="muted">Body text…</span>}</div>
+    {footer && <div className="tpl-f">{footer}</div>}
     <div className="meta">{fmtTime(new Date().toISOString())}</div>
-    {(form.buttons || []).map((b, i) => <div key={i} className="tpl-btn">{b.type === 'URL' ? <Link2 size={14} /> : b.type === 'PHONE_NUMBER' ? <PhoneCall size={14} /> : <Reply size={14} />}{b.text || 'Button'}
+    {buttons.map((b, i) => <div key={i} className="tpl-btn">{b.type === 'URL' ? <Link2 size={14} /> : b.type === 'PHONE_NUMBER' ? <PhoneCall size={14} /> : <Reply size={14} />}{b.text || 'Button'}
       {b.type === 'URL' && countVars(b.url) > 0 && <small className="muted"> {fill(b.url, [buttonVals?.[i] ?? b.example?.replace(/.*\//, '')])}</small>}</div>)}
   </div></div></div>)
 }
@@ -34,15 +50,62 @@ export function Preview({ form, headerVal, bodyVals, buttonVals }) {
 export function toForm(t) {
   const c = (type) => (t.components || []).find((x) => (x.type || '').toUpperCase() === type)
   const H = c('HEADER'), B = c('BODY'), F = c('FOOTER'), BT = c('BUTTONS')
+  if ((t.category || '').toUpperCase() === 'AUTHENTICATION') {
+    const rec = !!(B?.add_security_recommendation ?? /do not share this code/i.test(B?.text || ''))
+    const mins = F?.code_expiration_minutes || (/expires in (\d+) minutes/i.exec(F?.text || '') || [])[1] || ''
+    const raw = (BT?.buttons || [])[0] || {}
+    const otpType = String(raw.otp_type || 'COPY_CODE').toUpperCase()
+    return {
+      name: t.name, language: t.language, category: 'AUTHENTICATION',
+      header: { format: 'NONE', text: '', example: '' },
+      body: { text: '', examples: [], add_security_recommendation: rec },
+      footer: '',
+      code_expiration_minutes: mins ? String(mins) : '',
+      message_send_ttl_seconds: t.message_send_ttl_seconds || '',
+      buttons: [{
+        ...blankOtp(),
+        otp_type: ['COPY_CODE', 'ONE_TAP', 'ZERO_TAP'].includes(otpType) ? otpType : 'COPY_CODE',
+        text: raw.text || '', autofill_text: raw.autofill_text || '',
+        supported_apps: (raw.supported_apps || []).length ? raw.supported_apps.map((a) => ({ package_name: a.package_name || '', signature_hash: a.signature_hash || '' })) : [{ package_name: '', signature_hash: '' }],
+        zero_tap_terms_accepted: !!raw.zero_tap_terms_accepted,
+      }],
+    }
+  }
   return {
     name: t.name, language: t.language, category: t.category,
     header: H ? { format: H.format || 'TEXT', text: H.text || '', example: H.example?.header_text?.[0] || H.example?.header_handle?.[0] || '' } : { format: 'NONE', text: '', example: '' },
     body: { text: B?.text || '', examples: B?.example?.body_text?.[0] || [] },
     footer: F?.text || '',
+    code_expiration_minutes: '',
+    message_send_ttl_seconds: '',
     buttons: (BT?.buttons || []).map((b) => ({ type: b.type, text: b.text, url: b.url || '', phone_number: b.phone_number || '', example: b.example?.[0] || '' })),
   }
 }
-export const blankForm = () => ({ name: '', language: 'en_US', category: 'UTILITY', header: { format: 'NONE', text: '', example: '' }, body: { text: '', examples: [] }, footer: '', buttons: [] })
+export const blankForm = () => ({ name: '', language: 'en_US', category: 'UTILITY', header: { format: 'NONE', text: '', example: '' }, body: { text: '', examples: [], add_security_recommendation: true }, footer: '', code_expiration_minutes: '', message_send_ttl_seconds: '', buttons: [] })
+
+/** Stored client/admin template request -> builder form. */
+export function requestToForm(r) {
+  if ((r.category || '').toUpperCase() === 'AUTHENTICATION') {
+    const f = toForm({ name: r.name, language: r.language, category: r.category, components: r.components || [] })
+    if (r.form?.code_expiration_minutes) f.code_expiration_minutes = String(r.form.code_expiration_minutes)
+    if (r.form?.message_send_ttl_seconds) f.message_send_ttl_seconds = String(r.form.message_send_ttl_seconds)
+    if (typeof r.form?.body?.add_security_recommendation === 'boolean') f.body.add_security_recommendation = r.form.body.add_security_recommendation
+    if (r.form?.buttons?.[0]) {
+      const b = r.form.buttons[0]
+      f.buttons = [{ ...blankOtp(), ...b, type: 'OTP', otp_type: String(b.otp_type || 'COPY_CODE').toUpperCase(), supported_apps: b.supported_apps?.length ? b.supported_apps : blankOtp().supported_apps }]
+    }
+    return f
+  }
+  return {
+    name: r.name, language: r.language, category: r.category,
+    header: r.form?.header ? { format: r.form.header.format || 'NONE', text: r.form.header.text || '', example: r.form.header.example || '' } : { format: 'NONE', text: '', example: '' },
+    body: { text: r.form?.body?.text || '', examples: r.form?.body?.examples || [] },
+    footer: r.form?.footer || '',
+    code_expiration_minutes: '',
+    message_send_ttl_seconds: '',
+    buttons: (r.form?.buttons || []).map((b) => ({ type: b.type, text: b.text || '', url: b.url || '', phone_number: b.phone_number || '', example: b.example || '' })),
+  }
+}
 
 const SAMPLE = { IMAGE: ['.jpg,.jpeg,.png', ['image/jpeg', 'image/png'], 5, 'JPG or PNG, max 5 MB'], VIDEO: ['.mp4', ['video/mp4'], 16, 'MP4, max 16 MB'], DOCUMENT: ['.pdf', ['application/pdf'], 100, 'PDF, max 100 MB'] }
 
@@ -106,12 +169,29 @@ export function TemplateForm({ initial, editing, onDone, onCancel, submit, title
   }
   const setH = (patch) => setF((cur) => ({ ...cur, header: { ...cur.header, ...patch } }))
   const setBtn = (i, patch) => set({ buttons: f.buttons.map((b, j) => (j === i ? { ...b, ...patch } : b)) })
+  const isAuth = f.category === 'AUTHENTICATION'
+  const otp = f.buttons[0] || blankOtp()
   const save = async (e) => {
     e.preventDefault()
-    if (headVars > 1) { toast.error('The header can have only one variable ({{1}}).'); return }
-    if (f.body.examples.slice(0, n).some((x) => !String(x || '').trim())) { toast.error('Add a sample value for every body variable.'); return }
+    if (!isAuth) {
+      if (headVars > 1) { toast.error('The header can have only one variable ({{1}}).'); return }
+      if (f.body.examples.slice(0, n).some((x) => !String(x || '').trim())) { toast.error('Add a sample value for every body variable.'); return }
+    }
     setBusy(true)
-    const body = { ...f, header: f.header.format === 'NONE' ? null : f.header, body: { text: f.body.text, examples: f.body.examples.slice(0, n) }, footer: f.footer || null, ...(clients ? { client_id: clientId || null } : {}) }
+    const body = isAuth ? {
+      name: f.name, language: f.language, category: 'AUTHENTICATION', header: null,
+      body: { add_security_recommendation: !!f.body.add_security_recommendation }, footer: null,
+      code_expiration_minutes: f.code_expiration_minutes ? Number(f.code_expiration_minutes) : null,
+      message_send_ttl_seconds: f.message_send_ttl_seconds ? Number(f.message_send_ttl_seconds) : null,
+      buttons: [{
+        type: 'OTP', otp_type: otp.otp_type || 'COPY_CODE',
+        ...(otp.text ? { text: otp.text } : {}),
+        ...(otp.autofill_text && otp.otp_type !== 'COPY_CODE' ? { autofill_text: otp.autofill_text } : {}),
+        ...((otp.otp_type === 'ONE_TAP' || otp.otp_type === 'ZERO_TAP') ? { supported_apps: (otp.supported_apps || []).filter((a) => a.package_name || a.signature_hash) } : {}),
+        ...(otp.otp_type === 'ZERO_TAP' ? { zero_tap_terms_accepted: !!otp.zero_tap_terms_accepted } : {}),
+      }],
+      ...(clients ? { client_id: clientId || null } : {}),
+    } : { ...f, header: f.header.format === 'NONE' ? null : f.header, body: { text: f.body.text, examples: f.body.examples.slice(0, n) }, footer: f.footer || null, ...(clients ? { client_id: clientId || null } : {}) }
     try { if (submit) await submit(body); else { const res = await api(editing ? `/templates/${editing.id}` : '/templates', { method: editing ? 'PUT' : 'POST', body }); onDone(res) } }
     catch (e) { toast.error(e.message) } finally { setBusy(false) }
   }
@@ -132,9 +212,30 @@ export function TemplateForm({ initial, editing, onDone, onCancel, submit, title
           <div className="form-3">
             <Field label="Name" hint="lowercase_with_underscores"><input disabled={!!editing} value={f.name} onChange={(e) => set({ name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })} required /></Field>
             <Field label="Language"><select disabled={!!editing} value={f.language} onChange={(e) => set({ language: e.target.value })}>{LANGS.map((l) => <option key={l}>{l}</option>)}</select></Field>
-            <Field label="Category"><select disabled={editing?.status === 'APPROVED'} value={f.category} onChange={(e) => set({ category: e.target.value })}><option>UTILITY</option><option>MARKETING</option><option>AUTHENTICATION</option></select></Field>
+            <Field label="Category"><select disabled={editing?.status === 'APPROVED'} value={f.category} onChange={(e) => {
+              const category = e.target.value
+              if (category === 'AUTHENTICATION') set({ category, header: { format: 'NONE', text: '', example: '' }, body: { text: '', examples: [], add_security_recommendation: true }, footer: '', code_expiration_minutes: '', message_send_ttl_seconds: '', buttons: [blankOtp()] })
+              else set({ category, ...(f.category === 'AUTHENTICATION' ? { header: { format: 'NONE', text: '', example: '' }, body: { text: '', examples: [] }, footer: '', code_expiration_minutes: '', message_send_ttl_seconds: '', buttons: [] } : {}) })
+            }}><option>UTILITY</option><option>MARKETING</option><option>AUTHENTICATION</option></select></Field>
           </div>
           {clients && <Field label="Client" icon={Briefcase} hint="Optional. The template appears in this client's portal once approved."><ClientSelect clients={clients} value={clientId} onChange={setClientId} placeholder="None / Internal" /></Field>}
+          {isAuth ? <div className="auth-builder" data-testid="auth-template-form">
+            <div className="alert info" data-testid="auth-template-hint">Authentication templates use Meta’s fixed text. A header, custom body, footer text, and extra buttons are not allowed.</div>
+            <label className="row gap8"><input type="checkbox" data-testid="auth-security" checked={!!f.body.add_security_recommendation} onChange={(e) => set({ body: { ...f.body, add_security_recommendation: e.target.checked } })} /> Add security recommendation (“For your security, do not share this code.”)</label>
+            <Field label="Code expiration (optional, 1–90 minutes)" hint="Adds the footer “This code expires in N minutes.”"><input type="number" min={1} max={90} data-testid="auth-expiration" value={f.code_expiration_minutes || ''} placeholder="e.g. 10" onChange={(e) => set({ code_expiration_minutes: e.target.value })} /></Field>
+            <Field label="Delivery TTL (optional, 30–900 seconds)" hint="How long Meta keeps trying to deliver the message"><input type="number" min={30} max={900} value={f.message_send_ttl_seconds || ''} placeholder="e.g. 60" onChange={(e) => set({ message_send_ttl_seconds: e.target.value })} /></Field>
+            <Field label="OTP button type"><select data-testid="auth-otp-type" value={otp.otp_type || 'COPY_CODE'} onChange={(e) => set({ buttons: [{ ...otp, otp_type: e.target.value }] })}>
+              <option value="COPY_CODE">Copy code</option><option value="ONE_TAP">One-tap autofill (Android)</option><option value="ZERO_TAP">Zero-tap (Android)</option></select></Field>
+            <Field label="Copy-code button text (optional)"><input maxLength={25} value={otp.text || ''} placeholder="Copy code" onChange={(e) => set({ buttons: [{ ...otp, text: e.target.value }] })} /></Field>
+            {(otp.otp_type === 'ONE_TAP' || otp.otp_type === 'ZERO_TAP') && <>
+              <Field label="Autofill button text (optional)"><input maxLength={25} value={otp.autofill_text || ''} placeholder="Autofill" onChange={(e) => set({ buttons: [{ ...otp, autofill_text: e.target.value }] })} /></Field>
+              <Field label="Android package name" hint="e.g. com.example.app"><input data-testid="auth-package" value={otp.supported_apps?.[0]?.package_name || ''} placeholder="com.example.app" onChange={(e) => set({ buttons: [{ ...otp, supported_apps: [{ ...(otp.supported_apps?.[0] || {}), package_name: e.target.value, signature_hash: otp.supported_apps?.[0]?.signature_hash || '' }] }] })} /></Field>
+              <Field label="App signing key hash"><input data-testid="auth-signature" value={otp.supported_apps?.[0]?.signature_hash || ''} placeholder="11-character hash" onChange={(e) => set({ buttons: [{ ...otp, supported_apps: [{ package_name: otp.supported_apps?.[0]?.package_name || '', signature_hash: e.target.value }] }] })} /></Field>
+            </>}
+            {otp.otp_type === 'ZERO_TAP' && <label className="row gap8"><input type="checkbox" checked={!!otp.zero_tap_terms_accepted} onChange={(e) => set({ buttons: [{ ...otp, zero_tap_terms_accepted: e.target.checked }] })} /> I accept Meta’s zero-tap terms</label>}
+            <Field label="Fixed message text (set by Meta)"><div className="muted" data-testid="auth-fixed-preview"><div>{authPreview({ add_security_recommendation: f.body.add_security_recommendation, code_expiration_minutes: f.code_expiration_minutes }).body}</div>
+              {authPreview({ add_security_recommendation: f.body.add_security_recommendation, code_expiration_minutes: f.code_expiration_minutes }).footer && <div>{authPreview({ add_security_recommendation: f.body.add_security_recommendation, code_expiration_minutes: f.code_expiration_minutes }).footer}</div>}</div></Field>
+          </div> : <>
           <div className="form-3">
             <Field label="Header"><select value={f.header.format} onChange={(e) => setH({ format: e.target.value })}>{['NONE', 'TEXT', 'IMAGE', 'DOCUMENT', 'VIDEO'].map((x) => <option key={x}>{x}</option>)}</select></Field>
             {f.header.format === 'TEXT' && <Field label="Header text" hint={headVars > 1 ? <span className="err-text">Only one variable is allowed in the header</span> : 'Max 60 characters, at most one {{1}}'} className="span2">
@@ -158,6 +259,7 @@ export function TemplateForm({ initial, editing, onDone, onCancel, submit, title
             {b.type === 'URL' && countVars(b.url) > 0 && <input placeholder="Example full URL" value={b.example} onChange={(e) => setBtn(i, { example: e.target.value })} />}
             {b.type === 'PHONE_NUMBER' && <input placeholder="+919876543210" value={b.phone_number} onChange={(e) => setBtn(i, { phone_number: e.target.value })} />}
             <Button size="sm" variant="ghost-danger" icon={Trash2} onClick={() => set({ buttons: f.buttons.filter((_, j) => j !== i) })} /></div>)}
+          </>}
           <div className="row"><Button type="submit" variant="primary" icon={Send} loading={busy}>{submitLabel || (editing ? 'Save / submit edit to Meta' : 'Submit for review')}</Button>
             {editing && clients && !submit && <Button icon={Briefcase} loading={busy} onClick={saveAssign} title="Saves only the client assignment in the portal. Nothing is sent to Meta.">Save (assign only)</Button>}</div>
           {editing && clients && !submit && <p className="muted small">Only content changes (header, body, footer, buttons, category) are sent to Meta. If you only change the client, it's saved directly in the portal.</p>}
@@ -306,7 +408,7 @@ export function TemplateSender({ numbers, templatesPath = '/templates?status=APP
             {(tpls || []).map((x) => <option key={x.id} value={x.id}>{x.name} ({x.language}) · {x.category}</option>)}</select></Field>
         {t && (t.header_variable_count > 0 || ['IMAGE', 'DOCUMENT', 'VIDEO'].includes(t.header_format)) &&
           <Field label={t.header_format === 'TEXT' ? 'Header {{1}}' : `Header ${t.header_format.toLowerCase()} URL or media id`}><input value={hv} onChange={(e) => setHv(e.target.value)} required /></Field>}
-        {t && t.body_variable_count > 0 && <div className="form-2">{Array.from({ length: t.body_variable_count }, (_, i) => <Field key={i} label={`Body {{${i + 1}}}`}><input value={vals[i] || ''} onChange={(e) => { const v = [...vals]; v[i] = e.target.value; setVals(v) }} required /></Field>)}</div>}
+        {t && t.body_variable_count > 0 && <div className="form-2">{Array.from({ length: t.body_variable_count }, (_, i) => <Field key={i} label={t.category === 'AUTHENTICATION' && i === 0 ? 'Verification code' : `Body {{${i + 1}}}`}><input value={vals[i] || ''} onChange={(e) => { const v = [...vals]; v[i] = e.target.value; setVals(v) }} required /></Field>)}</div>}
         {urlBtns.map(([b, i]) => <Field key={i} label={`Button “${b.text}” URL suffix`}><input value={bv[i] || ''} onChange={(e) => setBv({ ...bv, [i]: e.target.value })} required /></Field>)}
         <div><Button type="submit" variant="primary" icon={Send} loading={busy} disabled={!t}>Send template</Button></div>
       </form>

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { PhoneCall, Plus, FileText, Send, Phone, CalendarDays, CalendarRange, BarChart3, ArrowLeft, Search, ChevronLeft, ChevronRight, CheckCheck, Check, AlertTriangle, Eye, Clock } from 'lucide-react'
 import { api, fmtTime } from './api'
 import { Button, Card, PageHeader, Field, TableSkeleton, Empty, Badge, useToast, useLoad, Skeleton } from './ui'
-import { TemplateForm, blankForm, Preview } from './templates'
+import { TemplateForm, blankForm, Preview, requestToForm } from './templates'
 
 const n = (v) => (v ?? 0).toLocaleString('en-IN')
 const CATS = ['Retail', 'E-commerce', 'Manufacturing', 'Education', 'Healthcare', 'Finance', 'Travel', 'Food & beverage', 'Services', 'Other']
@@ -43,7 +43,7 @@ export function NumberRequestsPage() {
     </div></div>)
 }
 
-const reqForm = (r) => ({ header: r.form?.header ? { format: r.form.header.format || 'NONE', text: r.form.header.text || '' } : { format: 'NONE' }, body: r.form?.body || { text: '' }, footer: r.form?.footer || '', buttons: r.form?.buttons || [] })
+const reqForm = (r) => requestToForm(r)
 
 export function TemplateRequestsPage() {
   const [rows, reload, loading] = useLoad('/client/template-requests'); const toast = useToast()

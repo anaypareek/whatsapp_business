@@ -24,7 +24,7 @@ class TemplateRequestController extends Controller
             || TemplateRequest::where('name', $d['name'])->where('language', $d['language'])->where('status', 'pending')
                 ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))->exists();
         if ($dup) abort(response()->json(['message' => 'A template or pending request with this name and language already exists.', 'errors' => ['name' => ['Duplicate name+language']]], 422));
-        $form = collect($d)->only(['header', 'body', 'footer', 'buttons'])->all();
+        $form = collect($d)->only(['header', 'body', 'footer', 'buttons', 'code_expiration_minutes', 'message_send_ttl_seconds'])->all();
         return [$d, $form, $components];
     }
 
@@ -55,7 +55,10 @@ class TemplateRequestController extends Controller
         }
         try {
             $components = \App\Services\TemplateSamples::resolve($t->components ?? [], $t->form['header'] ?? null, $wa);
-            $res = $wa->createTemplate(['name' => $t->name, 'language' => $t->language, 'category' => $t->category, 'components' => $components]);
+            $res = $wa->createTemplate(TemplateBuilder::metaPayload([
+                'name' => $t->name, 'language' => $t->language, 'category' => $t->category,
+                'message_send_ttl_seconds' => $t->form['message_send_ttl_seconds'] ?? null,
+            ], $components));
         } catch (\Illuminate\Validation\ValidationException $e) {
             throw $e;
         } catch (Throwable $e) {
